@@ -25,6 +25,8 @@ class CcxtBrokerAdapter(BrokerAdapter):
         self._symbol = symbol
         self._quote = quote_currency
         self._position: PositionState = PositionState()
+        self._stop_order_id: str | None = None
+        self._tp_order_id: str | None = None
 
     def refresh_position(self, mark_price: float) -> None:
         try:
@@ -38,7 +40,6 @@ class CcxtBrokerAdapter(BrokerAdapter):
                 self._position = PositionState()
                 return
 
-            # Approximate entry from trades or mark
             entry = mark_price
             side = PositionSide.LONG
             upnl = (mark_price - entry) * size
@@ -47,6 +48,8 @@ class CcxtBrokerAdapter(BrokerAdapter):
                 size=size,
                 entry_price=entry,
                 unrealized_pnl=upnl,
+                stop_loss=self._position.stop_loss,
+                take_profit=self._position.take_profit,
             )
         except Exception as e:
             logger.warning("Could not refresh position: %s", e)
@@ -69,33 +72,102 @@ class CcxtBrokerAdapter(BrokerAdapter):
             currency=self._quote,
         )
 
+    def _cancel_protective_orders(self) -> None:
+        for order_id in (self._stop_order_id, self._tp_order_id):
+            if not order_id:
+                continue
+            try:
+                self._exchange.cancel_order(order_id, self._symbol)
+            except Exception as e:
+                logger.debug("Could not cancel order %s: %s", order_id, e)
+        self._stop_order_id = None
+        self._tp_order_id = None
+
+    def _place_protective_orders(
+        self,
+        side: PositionSide,
+        amount: float,
+        stop_loss: float,
+        take_profit: float,
+    ) -> None:
+        exit_side = "sell" if side == PositionSide.LONG else "buy"
+        try:
+            tp_order = self._exchange.create_order(
+                self._symbol,
+                "limit",
+                exit_side,
+                amount,
+                take_profit,
+            )
+            self._tp_order_id = tp_order.get("id")
+        except Exception as e:
+            logger.warning("Could not place take-profit order: %s", e)
+
+        try:
+            params: dict[str, Any] = {"stopPrice": stop_loss}
+            stop_order = self._exchange.create_order(
+                self._symbol,
+                "stop_market",
+                exit_side,
+                amount,
+                None,
+                params,
+            )
+            self._stop_order_id = stop_order.get("id")
+        except Exception as e:
+            logger.warning(
+                "Could not place stop-loss order (soft stops still active): %s", e
+            )
+
     def close_position(self) -> None:
         pos = self._position
         if pos.side == PositionSide.FLAT:
             return
+        self._cancel_protective_orders()
         side = "sell" if pos.side == PositionSide.LONG else "buy"
         self._exchange.create_market_order(self._symbol, side, pos.size)
         self._position = PositionState()
 
-    def enter_long(self, stake_cash: float, price: float) -> None:
-        amount = stake_cash / price
-        self._exchange.create_market_order(self._symbol, "buy", amount)
+    def enter_long(
+        self,
+        size: float,
+        price: float,
+        *,
+        stop_loss: float,
+        take_profit: float,
+    ) -> None:
+        self._exchange.create_market_order(self._symbol, "buy", size)
         self._position = PositionState(
             side=PositionSide.LONG,
-            size=amount,
+            size=size,
             entry_price=price,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+        )
+        self._place_protective_orders(
+            PositionSide.LONG, size, stop_loss, take_profit
         )
 
-    def enter_short(self, stake_cash: float, price: float) -> None:
-        # Spot exchanges may not support short; futures/margin required.
+    def enter_short(
+        self,
+        size: float,
+        price: float,
+        *,
+        stop_loss: float,
+        take_profit: float,
+    ) -> None:
         if not self._exchange.has.get("createOrder", False):
             raise RuntimeError("Exchange does not support orders")
-        amount = stake_cash / price
-        self._exchange.create_market_order(self._symbol, "sell", amount)
+        self._exchange.create_market_order(self._symbol, "sell", size)
         self._position = PositionState(
             side=PositionSide.SHORT,
-            size=amount,
+            size=size,
             entry_price=price,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+        )
+        self._place_protective_orders(
+            PositionSide.SHORT, size, stop_loss, take_profit
         )
 
 

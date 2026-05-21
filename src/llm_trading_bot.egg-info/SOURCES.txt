@@ -4,6 +4,7 @@ src/llm_trading_bot/__init__.py
 src/llm_trading_bot/__main__.py
 src/llm_trading_bot/cli.py
 src/llm_trading_bot/config.py
+src/llm_trading_bot/display.py
 src/llm_trading_bot.egg-info/PKG-INFO
 src/llm_trading_bot.egg-info/SOURCES.txt
 src/llm_trading_bot.egg-info/dependency_links.txt
@@ -14,6 +15,7 @@ src/llm_trading_bot/brokers/__init__.py
 src/llm_trading_bot/brokers/backtrader_broker.py
 src/llm_trading_bot/brokers/ccxt_broker.py
 src/llm_trading_bot/data/__init__.py
+src/llm_trading_bot/data/historical.py
 src/llm_trading_bot/data/serialize.py
 src/llm_trading_bot/llm/__init__.py
 src/llm_trading_bot/llm/client.py

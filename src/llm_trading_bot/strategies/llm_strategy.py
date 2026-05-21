@@ -43,10 +43,9 @@ class LLMStrategy(bt.Strategy):
             return
 
         candles = self._build_history()
-        close_price = float(self.data.close[0])
         self._engine.on_new_candle(
             candles,
-            close_price,
+            candles[-1],
             bar=self._bar_count,
             total_bars=self._total_bars or None,
         )

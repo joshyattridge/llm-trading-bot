@@ -10,6 +10,8 @@ class BacktraderBrokerAdapter(BrokerAdapter):
     def __init__(self, strategy: bt.Strategy, stake_currency: str = "USDT"):
         self._strategy = strategy
         self._currency = stake_currency
+        self._stop_loss: float | None = None
+        self._take_profit: float | None = None
 
     def _broker(self) -> bt.brokers.BackBroker:
         return self._strategy.broker
@@ -32,6 +34,8 @@ class BacktraderBrokerAdapter(BrokerAdapter):
             size=abs(pos.size),
             entry_price=entry,
             unrealized_pnl=upnl,
+            stop_loss=self._stop_loss,
+            take_profit=self._take_profit,
         )
 
     def get_account(self, mark_price: float) -> AccountState:
@@ -47,15 +51,33 @@ class BacktraderBrokerAdapter(BrokerAdapter):
 
     def close_position(self) -> None:
         self._strategy.close()
+        self._stop_loss = None
+        self._take_profit = None
 
-    def enter_long(self, stake_cash: float, price: float) -> None:
-        if price <= 0:
+    def enter_long(
+        self,
+        size: float,
+        price: float,
+        *,
+        stop_loss: float,
+        take_profit: float,
+    ) -> None:
+        if price <= 0 or size <= 0:
             return
-        size = stake_cash / price
+        self._stop_loss = stop_loss
+        self._take_profit = take_profit
         self._strategy.buy(size=size)
 
-    def enter_short(self, stake_cash: float, price: float) -> None:
-        if price <= 0:
+    def enter_short(
+        self,
+        size: float,
+        price: float,
+        *,
+        stop_loss: float,
+        take_profit: float,
+    ) -> None:
+        if price <= 0 or size <= 0:
             return
-        size = stake_cash / price
+        self._stop_loss = stop_loss
+        self._take_profit = take_profit
         self._strategy.sell(size=size)

@@ -66,9 +66,8 @@ def run_live_loop(
 
             last_ts = latest_ts
             history = _ohlcv_to_candles(closed[-settings.candle_history :])
-            close_price = history[-1].close
             bar = display.next_live_candle()
-            engine.on_new_candle(history, close_price, bar=bar)
+            engine.on_new_candle(history, history[-1], bar=bar)
         except KeyboardInterrupt:
             logger.info("Stopped by user")
             break

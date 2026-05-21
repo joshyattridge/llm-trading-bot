@@ -45,10 +45,14 @@ rm -rf .venv && python3 -m venv .venv && pip install -e .
 
 ### Backtest
 
-Uses `data/sample.csv` by default. Datetime in the CSV is only for Backtrader indexing — **never sent to the LLM**.
+Fetches real OHLCV from the exchange in `.env` (`EXCHANGE_ID`, `SYMBOL`, `TIMEFRAME`). Datetime is only for Backtrader indexing — **never sent to the LLM**.
 
 ```bash
-llm-bot backtest --csv data/sample.csv
+# 50 hourly candles on BTC/USDT → ~50 hours, 1 LLM call after 50-bar warmup
+llm-bot backtest --candles 50
+
+# 100 candles → 51 LLM decisions when CANDLE_HISTORY=50
+llm-bot backtest -n 100 -v
 ```
 
 ### Paper trading
@@ -74,10 +78,12 @@ llm-bot live
 | `OPENAI_MODEL` | e.g. `gpt-4o-mini` |
 | `OPENAI_BASE_URL` | Optional compatible API |
 | `CANDLE_HISTORY` | Bars sent to LLM (default 50) |
+| `STARTING_BALANCE` | Backtest starting cash (default 10000) |
+| `TRADING_STYLE_PROMPT_PATH` | File with trading/risk rules (default `prompts/trading_style.txt`) |
+| `TRADING_STYLE_PROMPT` | Optional inline trading style (overrides path when set) |
 | `EXCHANGE_ID` / `SYMBOL` / `TIMEFRAME` | ccxt settings |
-| `DEFAULT_STAKE_PCT` / `MAX_STAKE_PCT` | Risk caps |
 
-Edit **`prompts/trading_style.txt`** to change risk posture, style, and execution rules.
+Set risk posture and sizing in **`.env`** via `TRADING_STYLE_PROMPT_PATH` or `TRADING_STYLE_PROMPT`, or edit **`prompts/trading_style.txt`** when using the default path.
 
 ## How it works
 
@@ -123,7 +129,6 @@ src/llm_trading_bot/
   brokers/            # Backtrader + ccxt adapters
   runners/            # backtest + live loops
 prompts/trading_style.txt
-data/sample.csv
 ```
 
 ## Notes

@@ -55,7 +55,7 @@ class Settings(BaseSettings):
 
         return (
             "Trade conservatively. Prefer holding in unclear markets. "
-            "You choose stake_pct per trade based on conviction and conditions."
+            "On entries, set risk_pct and absolute stop_loss / take_profit levels."
         )
 
 

@@ -36,6 +36,8 @@ class PositionState(BaseModel):
     entry_price: float | None = None
     unrealized_pnl: float = 0.0
     bars_in_trade: int = 0
+    stop_loss: float | None = None
+    take_profit: float | None = None
 
 
 class AccountState(BaseModel):
@@ -49,10 +51,18 @@ class AccountState(BaseModel):
 
 class LLMDecision(BaseModel):
     action: Action
-    stake_pct: float = Field(
+    risk_pct: float = Field(
         ge=0.0,
         le=1.0,
-        description="Fraction of available balance to allocate (new entries only).",
+        description="Fraction of equity to risk on a new entry (ignored for hold/close).",
+    )
+    stop_loss: float = Field(
+        ge=0.0,
+        description="Stop-loss price for a new entry (0 when not entering).",
+    )
+    take_profit: float = Field(
+        ge=0.0,
+        description="Take-profit price for a new entry (0 when not entering).",
     )
     reasoning: str = ""
 
@@ -61,5 +71,7 @@ class LLMDecisionResponse(BaseModel):
     """Structured response schema sent to the model."""
 
     action: Literal["hold", "close", "enter_long", "enter_short"]
-    stake_pct: float = Field(ge=0.0, le=1.0)
+    risk_pct: float = Field(ge=0.0, le=1.0)
+    stop_loss: float = Field(ge=0.0)
+    take_profit: float = Field(ge=0.0)
     reasoning: str

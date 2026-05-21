@@ -137,7 +137,11 @@ class TerminalDisplay:
         action_line.append("Decision  ", style="dim")
         action_line.append(action_label, style=style)
         if decision.action in (Action.ENTER_LONG, Action.ENTER_SHORT):
-            action_line.append(f"  ·  {decision.stake_pct * 100:.1f}% of cash", style="dim")
+            action_line.append(
+                f"  ·  risk {decision.risk_pct * 100:.1f}%  ·  "
+                f"SL ${decision.stop_loss:,.2f}  ·  TP ${decision.take_profit:,.2f}",
+                style="dim",
+            )
         lines.append(str(action_line))
 
         reasoning = decision.reasoning.strip() or "(no reasoning)"
@@ -183,8 +187,13 @@ class TerminalDisplay:
         entry = position.entry_price or 0.0
         pnl = position.unrealized_pnl
         pnl_style = "green" if pnl >= 0 else "red"
-        return (
+        parts = [
             f"[dim]Position[/]  [{side_style} bold]{position.side.value.upper()}[/]  ·  "
             f"size {position.size:.6f}  ·  entry ${entry:,.2f}  ·  "
-            f"[dim]uPnL[/]  [{pnl_style}]${pnl:+,.2f}[/]"
-        )
+            f"[dim]uPnL[/]  [{pnl_style}]${pnl:+,.2f}[/]",
+        ]
+        if position.stop_loss is not None:
+            parts.append(f"[dim]SL[/]  ${position.stop_loss:,.2f}")
+        if position.take_profit is not None:
+            parts.append(f"[dim]TP[/]  ${position.take_profit:,.2f}")
+        return "  ·  ".join(parts)

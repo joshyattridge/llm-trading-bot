@@ -61,7 +61,9 @@ class LLMTradingAdvisor:
         parsed = LLMDecisionResponse.model_validate_json(raw)
         decision = LLMDecision(
             action=Action(parsed.action),
-            stake_pct=parsed.stake_pct,
+            risk_pct=parsed.risk_pct,
+            stop_loss=parsed.stop_loss,
+            take_profit=parsed.take_profit,
             reasoning=parsed.reasoning,
         )
         return self._validate_decision(decision, position)
@@ -73,17 +75,28 @@ class LLMTradingAdvisor:
     ) -> LLMDecision:
         """Enforce position constraints the LLM might violate."""
         side = position.side
+        invalid = LLMDecision(
+            action=Action.HOLD,
+            risk_pct=0.0,
+            stop_loss=0.0,
+            take_profit=0.0,
+            reasoning="invalid decision",
+        )
 
         if decision.action == Action.CLOSE and side == PositionSide.FLAT:
             logger.warning("LLM requested close while flat; forcing hold")
-            return LLMDecision(action=Action.HOLD, stake_pct=0.0, reasoning="invalid close")
+            return invalid
 
         if decision.action in (Action.ENTER_LONG, Action.ENTER_SHORT) and side != PositionSide.FLAT:
             logger.warning("LLM requested entry while in position; forcing hold")
-            return LLMDecision(action=Action.HOLD, stake_pct=0.0, reasoning="invalid entry")
+            return invalid
 
-        if decision.action in (Action.ENTER_LONG, Action.ENTER_SHORT) and decision.stake_pct <= 0:
-            logger.warning("LLM requested entry with zero stake; forcing hold")
-            return LLMDecision(action=Action.HOLD, stake_pct=0.0, reasoning="invalid stake")
+        if decision.action in (Action.ENTER_LONG, Action.ENTER_SHORT):
+            if decision.risk_pct <= 0:
+                logger.warning("LLM requested entry with zero risk_pct; forcing hold")
+                return invalid
+            if decision.stop_loss <= 0 or decision.take_profit <= 0:
+                logger.warning("LLM requested entry without stop_loss/take_profit; forcing hold")
+                return invalid
 
         return decision

@@ -22,6 +22,10 @@ def state_to_prompt(
         pos["entry_price"] = position.entry_price
         pos["unrealized_pnl"] = position.unrealized_pnl
         pos["bars_in_trade"] = position.bars_in_trade
+        if position.stop_loss is not None:
+            pos["stop_loss"] = position.stop_loss
+        if position.take_profit is not None:
+            pos["take_profit"] = position.take_profit
 
     return {
         "position": pos,
