@@ -1,0 +1,2 @@
+[console_scripts]
+llm-bot = llm_trading_bot.cli:app

@@ -1,0 +1,122 @@
+# LLM Trading Bot
+
+Python trading bot that consults an LLM on **every new closed candle**. The model receives OHLCV history (no dates/times), current position, account balance, and a customizable trading-style prompt — then chooses: **hold**, **close**, **enter_long**, or **enter_short**.
+
+## Stack
+
+| Layer | Library | Role |
+|-------|---------|------|
+| Backtest | [Backtrader](https://www.backtrader.com/) | Historical simulation, per-bar strategy |
+| Paper / Live | [ccxt](https://github.com/ccxt/ccxt) | Exchange connectivity (sandbox for paper) |
+| LLM | [OpenAI API](https://platform.openai.com/) | Structured JSON decisions (any OpenAI-compatible base URL) |
+
+## Quick start
+
+```bash
+cd ~/Documents/Personal/llm-trading-bot
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+cp .env.example .env
+# Add OPENAI_API_KEY
+```
+
+If you moved the project folder, recreate the venv (paths in `.venv` are absolute):
+
+```bash
+rm -rf .venv && python3 -m venv .venv && pip install -e .
+```
+
+### Backtest
+
+Fetches real OHLCV from the exchange in `.env` (`EXCHANGE_ID`, `SYMBOL`, `TIMEFRAME`). Datetime is only for Backtrader indexing — **never sent to the LLM**.
+
+```bash
+# 50 hourly candles on BTC/USDT → ~50 hours, 1 LLM call after 50-bar warmup
+llm-bot backtest --candles 50
+
+# 100 candles → 51 LLM decisions when CANDLE_HISTORY=50
+llm-bot backtest -n 100 -v
+```
+
+### Paper trading
+
+Polls the exchange for new closed candles (sandbox when `CCXT_SANDBOX=true`):
+
+```bash
+llm-bot paper
+```
+
+### Live trading
+
+```bash
+# Set CCXT_API_KEY, CCXT_API_SECRET, CCXT_SANDBOX=false
+llm-bot live
+```
+
+## Configuration
+
+| Variable | Description |
+|----------|-------------|
+| `OPENAI_API_KEY` | Required for all modes |
+| `OPENAI_MODEL` | e.g. `gpt-4o-mini` |
+| `OPENAI_BASE_URL` | Optional compatible API |
+| `CANDLE_HISTORY` | Bars sent to LLM (default 50) |
+| `STARTING_BALANCE` | Backtest starting cash (default 10000) |
+| `TRADING_STYLE_PROMPT_PATH` | File with trading/risk rules (default `prompts/trading_style.txt`) |
+| `TRADING_STYLE_PROMPT` | Optional inline trading style (overrides path when set) |
+| `EXCHANGE_ID` / `SYMBOL` / `TIMEFRAME` | ccxt settings |
+
+Set risk posture and sizing in **`.env`** via `TRADING_STYLE_PROMPT_PATH` or `TRADING_STYLE_PROMPT`, or edit **`prompts/trading_style.txt`** when using the default path.
+
+## How it works
+
+```mermaid
+flowchart LR
+  A[New closed candle] --> B[Build OHLCV history]
+  B --> C[Read position + balance]
+  C --> D[LLM JSON decision]
+  D --> E{Action}
+  E -->|hold| F[No trade]
+  E -->|close| G[Exit position]
+  E -->|enter_long/short| H[Size from stake_pct × cash]
+```
+
+**Anti look-ahead**
+
+- LLM payload has only `[open, high, low, close, volume]` arrays in time order.
+- Live loop drops the **forming** candle (`ohlcv[:-1]`).
+- Backtest waits until `CANDLE_HISTORY` bars exist before first decision.
+
+**LLM response schema**
+
+```json
+{
+  "action": "hold | close | enter_long | enter_short",
+  "stake_pct": 0.0,
+  "reasoning": "..."
+}
+```
+
+Invalid actions are corrected (e.g. close while flat → hold).
+
+## Project layout
+
+```
+src/llm_trading_bot/
+  cli.py              # Typer CLI
+  config.py           # Settings + style prompt path
+  llm/client.py       # OpenAI structured output
+  data/serialize.py   # Candle/account JSON for LLM
+  trading/engine.py   # Per-candle orchestration
+  strategies/         # Backtrader LLMStrategy
+  brokers/            # Backtrader + ccxt adapters
+  runners/            # backtest + live loops
+prompts/trading_style.txt
+```
+
+## Notes
+
+- **Short selling** on spot exchanges is limited; use futures/margin exchanges for real shorts in live mode.
+- Backtests call the LLM every bar after warmup — costs add up; use a cheaper model or subsample for development.
+- This is experimental software, not financial advice. Test thoroughly in paper mode before live capital.
