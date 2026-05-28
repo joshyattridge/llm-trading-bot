@@ -12,14 +12,40 @@ class BacktraderBrokerAdapter(BrokerAdapter):
         self._currency = stake_currency
         self._stop_loss: float | None = None
         self._take_profit: float | None = None
+        self._entry_rejected = False
+        self._entry_settled = False
 
     def _broker(self) -> bt.brokers.BackBroker:
         return self._strategy.broker
 
+    def on_order(self, order: bt.Order) -> None:
+        if order.status in (order.Completed, order.Margin, order.Rejected, order.Canceled):
+            self._entry_settled = True
+            if order.status in (order.Margin, order.Rejected, order.Canceled):
+                if not self._strategy.position.size:
+                    self._entry_rejected = True
+                    self._stop_loss = None
+                    self._take_profit = None
+
+    def consume_entry_settled(self) -> bool:
+        settled = self._entry_settled
+        self._entry_settled = False
+        return settled
+
+    def consume_entry_rejected(self) -> bool:
+        rejected = self._entry_rejected
+        self._entry_rejected = False
+        return rejected
+
+    def has_pending_entry(self) -> bool:
+        if self._strategy.position.size:
+            return False
+        return any(order.alive() for order in self._broker().orders)
+
     def get_position(self) -> PositionState:
         pos = self._strategy.position
         if not pos.size:
-            return PositionState()
+            return PositionState(pending_entry=self.has_pending_entry())
 
         side = PositionSide.LONG if pos.size > 0 else PositionSide.SHORT
         price = self._strategy.data.close[0]
@@ -61,12 +87,19 @@ class BacktraderBrokerAdapter(BrokerAdapter):
         *,
         stop_loss: float,
         take_profit: float,
-    ) -> None:
+    ) -> bool:
         if price <= 0 or size <= 0:
-            return
+            return False
+        if self.has_pending_entry():
+            return False
+        self._entry_rejected = False
+        self._entry_settled = False
         self._stop_loss = stop_loss
         self._take_profit = take_profit
         self._strategy.buy(size=size)
+        if self._entry_rejected:
+            return False
+        return True
 
     def enter_short(
         self,
@@ -75,9 +108,25 @@ class BacktraderBrokerAdapter(BrokerAdapter):
         *,
         stop_loss: float,
         take_profit: float,
-    ) -> None:
+    ) -> bool:
         if price <= 0 or size <= 0:
-            return
+            return False
+        if self.has_pending_entry():
+            return False
+        self._entry_rejected = False
+        self._entry_settled = False
         self._stop_loss = stop_loss
         self._take_profit = take_profit
         self._strategy.sell(size=size)
+        if self._entry_rejected:
+            return False
+        return True
+
+    def update_stops(
+        self,
+        *,
+        stop_loss: float,
+        take_profit: float,
+    ) -> None:
+        self._stop_loss = stop_loss
+        self._take_profit = take_profit

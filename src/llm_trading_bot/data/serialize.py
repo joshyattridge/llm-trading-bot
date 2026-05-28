@@ -17,6 +17,8 @@ def state_to_prompt(
     account: AccountState,
 ) -> dict:
     pos: dict = {"side": position.side.value}
+    if position.pending_entry:
+        pos["pending_entry"] = True
     if position.side.value != "flat":
         pos["size"] = position.size
         pos["entry_price"] = position.entry_price

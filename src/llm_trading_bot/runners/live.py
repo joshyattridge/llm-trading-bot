@@ -41,6 +41,8 @@ def run_live_loop(
         display,
         symbol=settings.symbol,
         timeframe=settings.timeframe,
+        commission_rate=settings.commission_rate,
+        leverage=settings.leverage,
     )
 
     last_ts: int | None = None

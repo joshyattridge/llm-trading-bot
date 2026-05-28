@@ -135,7 +135,7 @@ class CcxtBrokerAdapter(BrokerAdapter):
         *,
         stop_loss: float,
         take_profit: float,
-    ) -> None:
+    ) -> bool:
         self._exchange.create_market_order(self._symbol, "buy", size)
         self._position = PositionState(
             side=PositionSide.LONG,
@@ -147,6 +147,7 @@ class CcxtBrokerAdapter(BrokerAdapter):
         self._place_protective_orders(
             PositionSide.LONG, size, stop_loss, take_profit
         )
+        return True
 
     def enter_short(
         self,
@@ -155,7 +156,7 @@ class CcxtBrokerAdapter(BrokerAdapter):
         *,
         stop_loss: float,
         take_profit: float,
-    ) -> None:
+    ) -> bool:
         if not self._exchange.has.get("createOrder", False):
             raise RuntimeError("Exchange does not support orders")
         self._exchange.create_market_order(self._symbol, "sell", size)
@@ -168,6 +169,24 @@ class CcxtBrokerAdapter(BrokerAdapter):
         )
         self._place_protective_orders(
             PositionSide.SHORT, size, stop_loss, take_profit
+        )
+        return True
+
+    def update_stops(
+        self,
+        *,
+        stop_loss: float,
+        take_profit: float,
+    ) -> None:
+        pos = self._position
+        if pos.side == PositionSide.FLAT:
+            return
+        self._cancel_protective_orders()
+        self._position = pos.model_copy(
+            update={"stop_loss": stop_loss, "take_profit": take_profit},
+        )
+        self._place_protective_orders(
+            pos.side, pos.size, stop_loss, take_profit
         )
 
 

@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     ccxt_sandbox: bool = Field(default=True, validation_alias="CCXT_SANDBOX")
 
     starting_balance: float = Field(default=10_000.0, validation_alias="STARTING_BALANCE")
+    commission_rate: float = Field(default=0.001, validation_alias="COMMISSION_RATE")
+    leverage: float = Field(default=50.0, validation_alias="LEVERAGE")
 
     trading_style_prompt: str = Field(
         default="",

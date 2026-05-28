@@ -70,7 +70,11 @@ def run_backtest(
     )
     cerebro.adddata(dataframe_to_feed(ohlcv))
     cerebro.broker.setcash(initial_cash)
-    cerebro.broker.setcommission(commission=0.001)
+    cerebro.broker.setcommission(
+        commission=settings.commission_rate,
+        leverage=settings.leverage,
+        automargin=True,
+    )
 
     start_value = cerebro.broker.getvalue()
     logger.debug("Starting backtest with cash=%.2f", start_value)

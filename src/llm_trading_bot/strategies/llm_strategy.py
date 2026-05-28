@@ -32,9 +32,21 @@ class LLMStrategy(bt.Strategy):
             display,
             symbol=settings.symbol,
             timeframe=settings.timeframe,
+            commission_rate=settings.commission_rate,
+            leverage=settings.leverage,
         )
         self._bar_count = 0
         self._total_bars = self.p.total_bars
+
+    def notify_order(self, order: bt.Order) -> None:
+        self._broker_adapter.on_order(order)
+        if order.status in (
+            order.Completed,
+            order.Margin,
+            order.Rejected,
+            order.Canceled,
+        ):
+            self._engine.on_entry_order_settled()
 
     def next(self):
         # Only act on completed bars (backtrader calls next once per bar at close)
@@ -49,6 +61,8 @@ class LLMStrategy(bt.Strategy):
             bar=self._bar_count,
             total_bars=self._total_bars or None,
         )
+        if not self._engine.waiting_for_order_notify():
+            self._engine.flush_display()
 
     def _build_history(self) -> list[Candle]:
         n = self._history_len

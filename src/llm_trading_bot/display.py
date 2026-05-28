@@ -11,6 +11,8 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
+from llm_trading_bot.trading.models import ExecutionOutcome
+
 if TYPE_CHECKING:
     from llm_trading_bot.config import Settings
     from llm_trading_bot.trading.models import (
@@ -25,6 +27,19 @@ ACTION_STYLES = {
     "close": ("bold blue", "CLOSE"),
     "enter_long": ("bold green", "ENTER LONG"),
     "enter_short": ("bold red", "ENTER SHORT"),
+    "adjust_stops": ("bold cyan", "ADJUST STOPS"),
+}
+
+OUTCOME_STYLES = {
+    ExecutionOutcome.NOOP: None,
+    ExecutionOutcome.CLOSED: ("dim", "closed"),
+    ExecutionOutcome.STOPS_ADJUSTED: ("green", "stops updated"),
+    ExecutionOutcome.ORDER_SUBMITTED: ("green", "order submitted"),
+    ExecutionOutcome.EXECUTED: ("green", "filled"),
+    ExecutionOutcome.SKIPPED_INVALID_LEVELS: ("red", "skipped — invalid SL/TP"),
+    ExecutionOutcome.SKIPPED_ZERO_SIZE: ("red", "skipped — zero size"),
+    ExecutionOutcome.SKIPPED_PENDING_ENTRY: ("yellow", "skipped — entry pending"),
+    ExecutionOutcome.SKIPPED_ORDER_REJECTED: ("red", "skipped — order rejected"),
 }
 
 
@@ -67,6 +82,7 @@ class TerminalDisplay:
         table.add_row("LLM calls", str(decisions))
         table.add_row("Range", f"{from_ts} → {to_ts}")
         table.add_row("Model", settings.openai_model)
+        table.add_row("Leverage", f"{settings.leverage:g}x")
         self.console.print(
             Panel(table, title="[bold]Backtest[/]", border_style="cyan", padding=(1, 2))
         )
@@ -101,11 +117,15 @@ class TerminalDisplay:
         position: PositionState,
         account: AccountState,
         decision: LLMDecision,
+        outcome: ExecutionOutcome | None = None,
     ) -> None:
         from llm_trading_bot.trading.models import Action, PositionSide
 
         action_key = decision.action.value
         style, action_label = ACTION_STYLES[action_key]
+
+        if outcome is None:
+            outcome = ExecutionOutcome.NOOP
 
         if bar is not None and total_bars:
             step = f"Candle [bold]{bar}[/] / {total_bars}"
@@ -136,12 +156,25 @@ class TerminalDisplay:
         action_line = Text()
         action_line.append("Decision  ", style="dim")
         action_line.append(action_label, style=style)
-        if decision.action in (Action.ENTER_LONG, Action.ENTER_SHORT):
+        if decision.action in (
+            Action.ENTER_LONG,
+            Action.ENTER_SHORT,
+            Action.ADJUST_STOPS,
+        ):
+            if decision.action in (Action.ENTER_LONG, Action.ENTER_SHORT):
+                action_line.append(
+                    f"  ·  risk {decision.risk_pct * 100:.1f}%  ·  ",
+                    style="dim",
+                )
             action_line.append(
-                f"  ·  risk {decision.risk_pct * 100:.1f}%  ·  "
                 f"SL ${decision.stop_loss:,.2f}  ·  TP ${decision.take_profit:,.2f}",
                 style="dim",
             )
+        outcome_style = OUTCOME_STYLES.get(outcome)
+        if outcome_style:
+            o_style, o_label = outcome_style
+            action_line.append("  ·  ", style="dim")
+            action_line.append(o_label, style=o_style)
         lines.append(str(action_line))
 
         reasoning = decision.reasoning.strip() or "(no reasoning)"
@@ -152,6 +185,7 @@ class TerminalDisplay:
             Action.CLOSE: "blue",
             Action.ENTER_LONG: "green",
             Action.ENTER_SHORT: "red",
+            Action.ADJUST_STOPS: "cyan",
         }[decision.action]
 
         self.console.print(Panel("\n".join(lines), title=header, border_style=border))
@@ -181,6 +215,8 @@ class TerminalDisplay:
         from llm_trading_bot.trading.models import PositionSide
 
         if position.side == PositionSide.FLAT:
+            if position.pending_entry:
+                return "[dim]Position[/]  [bold]FLAT[/]  ·  [yellow]entry order pending[/]"
             return "[dim]Position[/]  [bold]FLAT[/]"
 
         side_style = "green" if position.side == PositionSide.LONG else "red"

@@ -9,6 +9,7 @@ class Action(str, Enum):
     CLOSE = "close"
     ENTER_LONG = "enter_long"
     ENTER_SHORT = "enter_short"
+    ADJUST_STOPS = "adjust_stops"
 
 
 class PositionSide(str, Enum):
@@ -30,6 +31,18 @@ class Candle(BaseModel):
         return [self.open, self.high, self.low, self.close, self.volume]
 
 
+class ExecutionOutcome(str, Enum):
+    NOOP = "noop"
+    CLOSED = "closed"
+    STOPS_ADJUSTED = "stops_adjusted"
+    ORDER_SUBMITTED = "order_submitted"
+    EXECUTED = "executed"
+    SKIPPED_INVALID_LEVELS = "skipped_invalid_levels"
+    SKIPPED_ZERO_SIZE = "skipped_zero_size"
+    SKIPPED_PENDING_ENTRY = "skipped_pending_entry"
+    SKIPPED_ORDER_REJECTED = "skipped_order_rejected"
+
+
 class PositionState(BaseModel):
     side: PositionSide = PositionSide.FLAT
     size: float = 0.0
@@ -38,6 +51,7 @@ class PositionState(BaseModel):
     bars_in_trade: int = 0
     stop_loss: float | None = None
     take_profit: float | None = None
+    pending_entry: bool = False
 
 
 class AccountState(BaseModel):
@@ -58,11 +72,11 @@ class LLMDecision(BaseModel):
     )
     stop_loss: float = Field(
         ge=0.0,
-        description="Stop-loss price for a new entry (0 when not entering).",
+        description="Stop-loss price for entries or adjust_stops (0 otherwise).",
     )
     take_profit: float = Field(
         ge=0.0,
-        description="Take-profit price for a new entry (0 when not entering).",
+        description="Take-profit price for entries or adjust_stops (0 otherwise).",
     )
     reasoning: str = ""
 
@@ -70,7 +84,7 @@ class LLMDecision(BaseModel):
 class LLMDecisionResponse(BaseModel):
     """Structured response schema sent to the model."""
 
-    action: Literal["hold", "close", "enter_long", "enter_short"]
+    action: Literal["hold", "close", "enter_long", "enter_short", "adjust_stops"]
     risk_pct: float = Field(ge=0.0, le=1.0)
     stop_loss: float = Field(ge=0.0)
     take_profit: float = Field(ge=0.0)

@@ -91,12 +91,26 @@ class LLMTradingAdvisor:
             logger.warning("LLM requested entry while in position; forcing hold")
             return invalid
 
+        if decision.action in (Action.ENTER_LONG, Action.ENTER_SHORT) and position.pending_entry:
+            logger.warning("LLM requested entry while order pending; forcing hold")
+            return invalid
+
         if decision.action in (Action.ENTER_LONG, Action.ENTER_SHORT):
             if decision.risk_pct <= 0:
                 logger.warning("LLM requested entry with zero risk_pct; forcing hold")
                 return invalid
             if decision.stop_loss <= 0 or decision.take_profit <= 0:
                 logger.warning("LLM requested entry without stop_loss/take_profit; forcing hold")
+                return invalid
+
+        if decision.action == Action.ADJUST_STOPS:
+            if side == PositionSide.FLAT:
+                logger.warning("LLM requested adjust_stops while flat; forcing hold")
+                return invalid
+            if decision.stop_loss <= 0 or decision.take_profit <= 0:
+                logger.warning(
+                    "LLM requested adjust_stops without stop_loss/take_profit; forcing hold"
+                )
                 return invalid
 
         return decision
