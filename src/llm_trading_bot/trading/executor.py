@@ -171,6 +171,14 @@ def execute_decision(
             return ExecutionOutcome.CLOSED
         return ExecutionOutcome.NOOP
 
+    if decision.action in (Action.ENTER_LONG, Action.ENTER_SHORT):
+        if position.side != PositionSide.FLAT:
+            logger.warning(
+                "Already in %s position; skipping entry",
+                position.side.value,
+            )
+            return ExecutionOutcome.NOOP
+
     if decision.action == Action.ADJUST_STOPS:
         entry_price = position.entry_price
         if entry_price is None or not _validate_adjust_stop_levels(
