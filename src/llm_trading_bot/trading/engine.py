@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -15,6 +17,7 @@ from llm_trading_bot.trading.models import (
     LLMDecision,
     PositionSide,
 )
+from llm_trading_bot.trading.stops import StopHit, check_stop_hit
 
 if TYPE_CHECKING:
     from llm_trading_bot.display import TerminalDisplay
@@ -59,27 +62,24 @@ class TradingEngine:
         if not market.lower.candles:
             return
 
-        if self._pending_panel and self._wait_for_order_notify:
-            self._wait_for_order_notify = False
-            self.flush_display()
-
         close_price = candle.close
-        stop_decision = self._check_stops(candle)
-        if stop_decision:
-            if self.display:
-                position = self.broker.get_position()
-                account = self.broker.get_account(mark_price=close_price)
-                self.display.print_candle(
-                    bar=bar,
-                    total_bars=total_bars,
-                    symbol=self.symbol,
-                    timeframe=self.timeframe,
-                    close_price=close_price,
-                    position=position,
-                    account=account,
-                    decision=stop_decision,
-                    outcome=ExecutionOutcome.CLOSED,
-                )
+
+        stop_hit = self._check_stops(candle, close_price)
+        if stop_hit:
+            self._defer_panel(
+                bar=bar,
+                total_bars=total_bars,
+                close_price=close_price,
+                decision=LLMDecision(
+                    action=Action.CLOSE,
+                    risk_pct=0.0,
+                    stop_loss=0.0,
+                    take_profit=0.0,
+                    reasoning=stop_hit.reason,
+                ),
+                outcome=ExecutionOutcome.CLOSED,
+            )
+            self._wait_for_order_notify = True
             return
 
         if self.broker.has_pending_entry():
@@ -89,6 +89,9 @@ class TradingEngine:
                 close_price=close_price,
                 decision=LLMDecision(
                     action=Action.HOLD,
+                    risk_pct=0.0,
+                    stop_loss=0.0,
+                    take_profit=0.0,
                     reasoning="Waiting for pending entry order to fill.",
                 ),
                 outcome=ExecutionOutcome.SKIPPED_PENDING_ENTRY,
@@ -96,7 +99,7 @@ class TradingEngine:
             self.flush_display()
             return
 
-        position = self._position_for_llm()
+        position = self._position_for_llm(close_price)
         if position.side == PositionSide.FLAT:
             self._bars_in_trade = 0
         else:
@@ -127,7 +130,7 @@ class TradingEngine:
             sizing_price=sizing_price,
         )
 
-        position = self.broker.get_position()
+        position = self.broker.get_position(mark_price=close_price)
         account = self.broker.get_account(mark_price=close_price)
         self._defer_panel(
             bar=bar,
@@ -138,34 +141,34 @@ class TradingEngine:
             decision=decision,
             outcome=outcome,
         )
-        self._wait_for_order_notify = decision.action in (
-            Action.ENTER_LONG,
-            Action.ENTER_SHORT,
-        ) and outcome not in (
-            ExecutionOutcome.SKIPPED_INVALID_LEVELS,
-            ExecutionOutcome.SKIPPED_ZERO_SIZE,
-            ExecutionOutcome.SKIPPED_PENDING_ENTRY,
-            ExecutionOutcome.SKIPPED_ORDER_REJECTED,
+        self._wait_for_order_notify = self._should_wait_for_order(
+            decision,
+            outcome,
         )
 
-    def on_entry_order_settled(self) -> None:
+    def on_order_settled(self) -> None:
         if self._pending_panel is None:
             return
 
         rejected = getattr(self.broker, "consume_entry_rejected", lambda: False)()
         getattr(self.broker, "consume_entry_settled", lambda: False)()
 
+        mark = self._pending_panel["close_price"]
+        decision = self._pending_panel["decision"]
+        outcome = self._pending_panel.get("outcome")
+
         if rejected:
             self._pending_panel["outcome"] = ExecutionOutcome.SKIPPED_ORDER_REJECTED
+        elif outcome == ExecutionOutcome.CLOSED:
+            self._pending_panel["outcome"] = ExecutionOutcome.CLOSED
         else:
-            position = self.broker.get_position()
+            position = self.broker.get_position(mark_price=mark)
             if position.side != PositionSide.FLAT:
                 self._pending_panel["outcome"] = ExecutionOutcome.EXECUTED
             elif self.broker.has_pending_entry():
                 self._pending_panel["outcome"] = ExecutionOutcome.ORDER_SUBMITTED
 
-        mark = self._pending_panel["close_price"]
-        self._pending_panel["position"] = self.broker.get_position()
+        self._pending_panel["position"] = self.broker.get_position(mark_price=mark)
         self._pending_panel["account"] = self.broker.get_account(mark_price=mark)
         self._wait_for_order_notify = False
         self.flush_display()
@@ -194,7 +197,7 @@ class TradingEngine:
         account=None,
     ) -> None:
         if position is None:
-            position = self.broker.get_position()
+            position = self.broker.get_position(mark_price=close_price)
         if account is None:
             account = self.broker.get_account(mark_price=close_price)
         self._pending_panel = {
@@ -210,8 +213,8 @@ class TradingEngine:
         }
         self._display_flushed = False
 
-    def _position_for_llm(self):
-        position = self.broker.get_position()
+    def _position_for_llm(self, mark_price: float):
+        position = self.broker.get_position(mark_price=mark_price)
         if position.side != PositionSide.FLAT:
             return position
         pending = self.broker.has_pending_entry()
@@ -219,38 +222,37 @@ class TradingEngine:
             return position
         return position.model_copy(update={"pending_entry": pending})
 
-    def _check_stops(self, candle: Candle) -> LLMDecision | None:
-        position = self.broker.get_position()
+    def _check_stops(self, candle: Candle, close_price: float) -> StopHit | None:
+        position = self.broker.get_position(mark_price=close_price)
         if position.side == PositionSide.FLAT:
             return None
 
-        stop_loss = position.stop_loss
-        take_profit = position.take_profit
-        if stop_loss is None and take_profit is None:
+        hit = check_stop_hit(position, candle)
+        if hit is None:
             return None
 
-        hit_reason = None
-        if position.side == PositionSide.LONG:
-            if stop_loss is not None and candle.low <= stop_loss:
-                hit_reason = f"stop loss hit at {stop_loss:.2f}"
-            elif take_profit is not None and candle.high >= take_profit:
-                hit_reason = f"take profit hit at {take_profit:.2f}"
-        elif position.side == PositionSide.SHORT:
-            if stop_loss is not None and candle.high >= stop_loss:
-                hit_reason = f"stop loss hit at {stop_loss:.2f}"
-            elif take_profit is not None and candle.low <= take_profit:
-                hit_reason = f"take profit hit at {take_profit:.2f}"
-
-        if not hit_reason:
-            return None
-
-        logger.debug("Closing position — %s", hit_reason)
-        self.broker.close_position()
+        logger.debug("Closing position — %s", hit.reason)
+        self.broker.close_position_at_price(hit.fill_price)
         self._bars_in_trade = 0
-        return LLMDecision(
-            action=Action.CLOSE,
-            risk_pct=0.0,
-            stop_loss=0.0,
-            take_profit=0.0,
-            reasoning=hit_reason,
+        return hit
+
+    @staticmethod
+    def _should_wait_for_order(
+        decision: LLMDecision,
+        outcome: ExecutionOutcome,
+    ) -> bool:
+        if outcome in (
+            ExecutionOutcome.SKIPPED_INVALID_LEVELS,
+            ExecutionOutcome.SKIPPED_ZERO_SIZE,
+            ExecutionOutcome.SKIPPED_PENDING_ENTRY,
+            ExecutionOutcome.SKIPPED_ORDER_REJECTED,
+        ):
+            return False
+
+        if decision.action == Action.CLOSE and outcome == ExecutionOutcome.CLOSED:
+            return True
+
+        return decision.action in (
+            Action.ENTER_LONG,
+            Action.ENTER_SHORT,
         )

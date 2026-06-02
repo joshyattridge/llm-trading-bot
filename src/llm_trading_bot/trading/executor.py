@@ -18,7 +18,7 @@ _CASH_BUFFER = 0.002
 
 class BrokerAdapter(ABC):
     @abstractmethod
-    def get_position(self) -> PositionState:
+    def get_position(self, mark_price: float | None = None) -> PositionState:
         ...
 
     @abstractmethod
@@ -28,6 +28,10 @@ class BrokerAdapter(ABC):
     @abstractmethod
     def close_position(self) -> None:
         ...
+
+    def close_position_at_price(self, price: float) -> None:
+        """Close at a specific price when supported; otherwise market close."""
+        self.close_position()
 
     @abstractmethod
     def enter_long(
@@ -126,6 +130,24 @@ def _validate_stop_levels(
     return False
 
 
+def _validate_adjust_stop_levels(
+    side: PositionSide,
+    entry_price: float,
+    stop_loss: float,
+    take_profit: float,
+) -> bool:
+    """Stop-loss must stay on the protective side of entry (breakeven allowed)."""
+    if not _validate_stop_levels(side, stop_loss, take_profit):
+        return False
+    if entry_price <= 0:
+        return False
+    if side == PositionSide.LONG:
+        return stop_loss <= entry_price
+    if side == PositionSide.SHORT:
+        return stop_loss >= entry_price
+    return False
+
+
 def execute_decision(
     broker: BrokerAdapter,
     decision: LLMDecision,
@@ -135,7 +157,7 @@ def execute_decision(
     leverage: float = 1.0,
     sizing_price: float | None = None,
 ) -> ExecutionOutcome:
-    position = broker.get_position()
+    position = broker.get_position(mark_price=price)
     account = broker.get_account(mark_price=price)
 
     if decision.action == Action.HOLD:
@@ -150,12 +172,17 @@ def execute_decision(
         return ExecutionOutcome.NOOP
 
     if decision.action == Action.ADJUST_STOPS:
-        if not _validate_stop_levels(
-            position.side, decision.stop_loss, decision.take_profit
+        entry_price = position.entry_price
+        if entry_price is None or not _validate_adjust_stop_levels(
+            position.side,
+            entry_price,
+            decision.stop_loss,
+            decision.take_profit,
         ):
             logger.warning(
-                "Invalid SL/TP levels for %s adjust_stops (sl=%.2f tp=%.2f); skipping",
+                "Invalid SL/TP levels for %s adjust_stops (entry=%.2f sl=%.2f tp=%.2f); skipping",
                 position.side.value,
+                entry_price or 0.0,
                 decision.stop_loss,
                 decision.take_profit,
             )

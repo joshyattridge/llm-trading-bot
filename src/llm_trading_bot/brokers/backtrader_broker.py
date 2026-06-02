@@ -42,13 +42,17 @@ class BacktraderBrokerAdapter(BrokerAdapter):
             return False
         return any(order.alive() for order in self._broker().orders)
 
-    def get_position(self) -> PositionState:
+    def get_position(self, mark_price: float | None = None) -> PositionState:
         pos = self._strategy.position
         if not pos.size:
             return PositionState(pending_entry=self.has_pending_entry())
 
         side = PositionSide.LONG if pos.size > 0 else PositionSide.SHORT
-        price = self._strategy.data.close[0]
+        price = (
+            mark_price
+            if mark_price is not None
+            else float(self._strategy.data.close[0])
+        )
         entry = pos.price
         if side == PositionSide.LONG:
             upnl = (price - entry) * abs(pos.size)
@@ -77,6 +81,20 @@ class BacktraderBrokerAdapter(BrokerAdapter):
 
     def close_position(self) -> None:
         self._strategy.close()
+        self._stop_loss = None
+        self._take_profit = None
+
+    def close_position_at_price(self, price: float) -> None:
+        pos = self._strategy.position
+        if not pos.size or price <= 0:
+            self.close_position()
+            return
+
+        size = abs(pos.size)
+        if pos.size > 0:
+            self._strategy.sell(size=size, exectype=bt.Order.Limit, price=price)
+        else:
+            self._strategy.buy(size=size, exectype=bt.Order.Limit, price=price)
         self._stop_loss = None
         self._take_profit = None
 

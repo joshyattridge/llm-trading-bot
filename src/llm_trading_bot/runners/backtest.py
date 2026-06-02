@@ -91,6 +91,7 @@ def run_backtest(
     )
     cerebro.adddata(dataframe_to_feed(ohlcv))
     cerebro.broker.setcash(initial_cash)
+    cerebro.broker.set_coc(True)
     cerebro.broker.setcommission(
         commission=settings.commission_rate,
         leverage=settings.leverage,

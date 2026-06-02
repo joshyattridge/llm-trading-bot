@@ -15,6 +15,7 @@ from llm_trading_bot.display import TerminalDisplay
 from llm_trading_bot.llm.client import LLMTradingAdvisor
 from llm_trading_bot.trading.engine import TradingEngine
 from llm_trading_bot.trading.models import Candle
+from llm_trading_bot.trading.stops import backtrader_candle_indices
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,7 @@ class LLMStrategy(bt.Strategy):
             order.Rejected,
             order.Canceled,
         ):
-            self._engine.on_entry_order_settled()
+            self._engine.on_order_settled()
 
     def next(self):
         self._bar_count += 1
@@ -77,7 +78,7 @@ class LLMStrategy(bt.Strategy):
     def _build_lower_history(self) -> list[Candle]:
         n = self._history_len
         candles: list[Candle] = []
-        for i in range(-n, 0):
+        for i in backtrader_candle_indices(n):
             candles.append(
                 Candle(
                     open=float(self.data.open[i]),

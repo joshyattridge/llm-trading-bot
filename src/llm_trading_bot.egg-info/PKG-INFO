@@ -14,6 +14,8 @@ Requires-Dist: pydantic-settings>=2.6.0
 Requires-Dist: typer>=0.15.0
 Requires-Dist: rich>=13.9.0
 Requires-Dist: matplotlib>=3.8.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
 
 # LLM Trading Bot
 

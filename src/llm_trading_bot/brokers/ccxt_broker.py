@@ -54,7 +54,7 @@ class CcxtBrokerAdapter(BrokerAdapter):
         except Exception as e:
             logger.warning("Could not refresh position: %s", e)
 
-    def get_position(self) -> PositionState:
+    def get_position(self, mark_price: float | None = None) -> PositionState:
         return self._position
 
     def get_account(self, mark_price: float) -> AccountState:

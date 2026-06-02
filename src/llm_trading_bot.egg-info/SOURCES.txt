@@ -31,3 +31,8 @@ src/llm_trading_bot/trading/__init__.py
 src/llm_trading_bot/trading/engine.py
 src/llm_trading_bot/trading/executor.py
 src/llm_trading_bot/trading/models.py
+src/llm_trading_bot/trading/stops.py
+tests/test_backtrader_broker.py
+tests/test_engine.py
+tests/test_executor.py
+tests/test_stops.py
