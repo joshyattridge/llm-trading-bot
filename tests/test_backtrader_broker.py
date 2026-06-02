@@ -100,3 +100,54 @@ class TestBacktraderBrokerAdapter:
         _run_strategy(ohlcv, [lambda a, s: None, capture])
 
         assert captured[-1] == pytest.approx(52.0)
+
+    def test_close_cancels_orphan_pending_entry_orders(self):
+        """Closing a position must cancel leftover entry orders so the engine is not stuck."""
+        ohlcv = [
+            {"open": 100, "high": 101, "low": 99, "close": 100, "volume": 1},
+            {"open": 100, "high": 101, "low": 99, "close": 100, "volume": 1},
+            {"open": 100, "high": 101, "low": 97, "close": 98, "volume": 1},
+            {"open": 98, "high": 99, "low": 97, "close": 98, "volume": 1},
+        ]
+        pending_after_close: list[bool] = []
+
+        def enter(adapter: BacktraderBrokerAdapter, strategy: bt.Strategy) -> None:
+            adapter.enter_long(1.0, 100.0, stop_loss=95.0, take_profit=120.0)
+
+        def orphan_entry(_adapter: BacktraderBrokerAdapter, strategy: bt.Strategy) -> None:
+            # Simulates a duplicate ENTER while already long — limit buy stays alive.
+            strategy.buy(size=1.0, exectype=bt.Order.Limit, price=50.0)
+
+        def close_at_stop(adapter: BacktraderBrokerAdapter, _strategy: bt.Strategy) -> None:
+            adapter.close_position_at_price(98.0)
+
+        def check_pending(adapter: BacktraderBrokerAdapter, _strategy: bt.Strategy) -> None:
+            pending_after_close.append(adapter.has_pending_entry())
+
+        _run_strategy(
+            ohlcv,
+            [enter, orphan_entry, close_at_stop, check_pending],
+        )
+
+        assert pending_after_close == [False]
+
+    def test_close_position_cancels_pending_entries_when_flat(self):
+        ohlcv = [
+            {"open": 100, "high": 101, "low": 99, "close": 100, "volume": 1},
+            {"open": 100, "high": 101, "low": 99, "close": 100, "volume": 1},
+            {"open": 100, "high": 101, "low": 99, "close": 100, "volume": 1},
+        ]
+        pending_after_close: list[bool] = []
+
+        def orphan_entry(_adapter: BacktraderBrokerAdapter, strategy: bt.Strategy) -> None:
+            strategy.buy(size=1.0, exectype=bt.Order.Limit, price=50.0)
+
+        def close_flat(adapter: BacktraderBrokerAdapter, _strategy: bt.Strategy) -> None:
+            adapter.close_position()
+
+        def check_pending(adapter: BacktraderBrokerAdapter, _strategy: bt.Strategy) -> None:
+            pending_after_close.append(adapter.has_pending_entry())
+
+        _run_strategy(ohlcv, [orphan_entry, close_flat, check_pending])
+
+        assert pending_after_close == [False]

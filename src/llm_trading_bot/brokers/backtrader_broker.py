@@ -79,7 +79,22 @@ class BacktraderBrokerAdapter(BrokerAdapter):
             currency=self._currency,
         )
 
+    def _cancel_pending_entry_orders(self) -> None:
+        """Cancel unfilled orders that would open or add to a position."""
+        pos_size = self._strategy.position.size
+        for order in list(self._broker().orders):
+            if not order.alive():
+                continue
+            is_buy = order.isbuy()
+            if pos_size > 0 and is_buy:
+                self._strategy.cancel(order)
+            elif pos_size < 0 and not is_buy:
+                self._strategy.cancel(order)
+            elif pos_size == 0:
+                self._strategy.cancel(order)
+
     def close_position(self) -> None:
+        self._cancel_pending_entry_orders()
         self._strategy.close()
         self._stop_loss = None
         self._take_profit = None
@@ -90,6 +105,7 @@ class BacktraderBrokerAdapter(BrokerAdapter):
             self.close_position()
             return
 
+        self._cancel_pending_entry_orders()
         size = abs(pos.size)
         if pos.size > 0:
             self._strategy.sell(size=size, exectype=bt.Order.Limit, price=price)
