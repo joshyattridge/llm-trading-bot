@@ -7,6 +7,7 @@ from llm_trading_bot.trading.executor import (
     execute_decision,
     sizing_price_for_entry,
 )
+from llm_trading_bot.data.market import MultiTimeframeMarket
 from llm_trading_bot.trading.models import (
     Action,
     Candle,
@@ -49,13 +50,13 @@ class TradingEngine:
 
     def on_new_candle(
         self,
-        history: list[Candle],
+        market: MultiTimeframeMarket,
         candle: Candle,
         *,
         bar: int | None = None,
         total_bars: int | None = None,
     ) -> None:
-        if not history:
+        if not market.lower.candles:
             return
 
         if self._pending_panel and self._wait_for_order_notify:
@@ -105,7 +106,7 @@ class TradingEngine:
             )
         account = self.broker.get_account(mark_price=close_price)
 
-        decision = self.advisor.decide(history, position, account)
+        decision = self.advisor.decide(market, position, account)
         sizing_price = None
         if decision.action in (Action.ENTER_LONG, Action.ENTER_SHORT):
             side = (

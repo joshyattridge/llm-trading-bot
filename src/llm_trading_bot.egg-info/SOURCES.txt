@@ -17,6 +17,7 @@ src/llm_trading_bot/brokers/ccxt_broker.py
 src/llm_trading_bot/data/__init__.py
 src/llm_trading_bot/data/chart.py
 src/llm_trading_bot/data/historical.py
+src/llm_trading_bot/data/market.py
 src/llm_trading_bot/data/serialize.py
 src/llm_trading_bot/llm/__init__.py
 src/llm_trading_bot/llm/client.py

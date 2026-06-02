@@ -75,7 +75,9 @@ class TerminalDisplay:
         table.add_column(style="dim")
         table.add_column()
         table.add_row("Symbol", f"[bold]{settings.symbol}[/]")
-        table.add_row("Timeframe", settings.timeframe)
+        table.add_row("Lower TF", settings.timeframe)
+        if settings.uses_higher_timeframe():
+            table.add_row("Higher TF", settings.higher_timeframe.strip())
         table.add_row("Window", span_label)
         table.add_row("Candles", str(candles))
         table.add_row("Warmup", f"{settings.candle_history} bars (no LLM)")
@@ -94,8 +96,15 @@ class TerminalDisplay:
         table.add_column()
         table.add_row("Mode", f"[bold]{mode}[/]")
         table.add_row("Symbol", settings.symbol)
-        table.add_row("Timeframe", settings.timeframe)
-        table.add_row("History", f"{settings.candle_history} candles to LLM")
+        table.add_row("Lower TF", settings.timeframe)
+        if settings.uses_higher_timeframe():
+            table.add_row(
+                "Higher TF",
+                f"{settings.higher_timeframe.strip()} ({settings.candle_history} bars)",
+            )
+        table.add_row("History", f"{settings.candle_history} bars per TF to LLM")
+        if settings.llm_include_chart:
+            table.add_row("Charts", "enabled (one per TF)")
         table.add_row("Model", settings.openai_model)
         self.console.print(
             Panel(table, title="[bold]Live loop[/]", border_style="cyan", padding=(1, 2))

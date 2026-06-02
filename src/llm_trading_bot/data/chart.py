@@ -56,12 +56,26 @@ def candles_to_chart_png_base64(
     ax.set_ylim(min(lows) - pad, max(highs) + pad)
     ax.set_xlabel("Bar index (0 = oldest, right = newest)")
     ax.set_ylabel("Price")
-    title_parts = ["OHLCV candlestick chart"]
-    if symbol:
-        title_parts.append(symbol)
+    bar_count = len(candles)
+    if timeframe and symbol:
+        title = f"{timeframe} · {symbol}"
+    elif timeframe:
+        title = timeframe
+    elif symbol:
+        title = symbol
+    else:
+        title = "OHLCV"
+    ax.set_title(f"{title}  ·  {bar_count} bars", fontsize=14, fontweight="bold")
     if timeframe:
-        title_parts.append(timeframe)
-    ax.set_title(" · ".join(title_parts))
+        ax.text(
+            0.01,
+            0.98,
+            f"Timeframe: {timeframe}",
+            transform=ax.transAxes,
+            fontsize=11,
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+        )
     ax.grid(True, alpha=0.25)
     fig.tight_layout()
 

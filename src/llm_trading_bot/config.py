@@ -20,7 +20,16 @@ class Settings(BaseSettings):
 
     exchange_id: str = Field(default="binance", validation_alias="EXCHANGE_ID")
     symbol: str = Field(default="BTC/USDT", validation_alias="SYMBOL")
-    timeframe: str = Field(default="1h", validation_alias="TIMEFRAME")
+    timeframe: str = Field(
+        default="1h",
+        validation_alias="TIMEFRAME",
+        description="Lower (execution) timeframe — bot trades on this bar close.",
+    )
+    higher_timeframe: str = Field(
+        default="",
+        validation_alias="HIGHER_TIMEFRAME",
+        description="Higher timeframe for context (e.g. 1d). Empty disables HTF data.",
+    )
     candle_history: int = Field(default=50, validation_alias="CANDLE_HISTORY")
     llm_include_chart: bool = Field(
         default=False,
@@ -51,6 +60,9 @@ class Settings(BaseSettings):
         if not path.is_absolute():
             path = PROJECT_ROOT / path
         return path
+
+    def uses_higher_timeframe(self) -> bool:
+        return bool(self.higher_timeframe.strip())
 
     def load_trading_style_prompt(self) -> str:
         if self.trading_style_prompt.strip():

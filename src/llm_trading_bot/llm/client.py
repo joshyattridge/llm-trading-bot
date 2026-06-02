@@ -4,12 +4,12 @@ from openai import OpenAI
 
 from llm_trading_bot.config import Settings
 from llm_trading_bot.data.chart import candles_to_chart_png_base64
-from llm_trading_bot.data.serialize import candles_to_prompt, state_to_prompt
+from llm_trading_bot.data.market import MultiTimeframeMarket
+from llm_trading_bot.data.serialize import market_to_prompt, state_to_prompt
 from llm_trading_bot.llm.prompts import build_user_content, system_prompt
 from llm_trading_bot.trading.models import (
     AccountState,
     Action,
-    Candle,
     LLMDecision,
     LLMDecisionResponse,
     PositionState,
@@ -30,21 +30,18 @@ class LLMTradingAdvisor:
 
     def decide(
         self,
-        candles: list[Candle],
+        market: MultiTimeframeMarket,
         position: PositionState,
         account: AccountState,
     ) -> LLMDecision:
-        market = candles_to_prompt(candles)
+        market_payload = market_to_prompt(market)
         state = state_to_prompt(position, account)
-        chart_b64: str | None = None
-        if self.settings.llm_include_chart:
-            chart_b64 = candles_to_chart_png_base64(
-                candles,
-                symbol=self.settings.symbol,
-                timeframe=self.settings.timeframe,
-            )
+        chart_images = self._build_chart_images(market) if self.settings.llm_include_chart else None
         user_content = build_user_content(
-            market, state, self._style, chart_png_base64=chart_b64
+            market_payload,
+            state,
+            self._style,
+            chart_images=chart_images,
         )
 
         schema = LLMDecisionResponse.model_json_schema()
@@ -55,7 +52,10 @@ class LLMTradingAdvisor:
             messages=[
                 {
                     "role": "system",
-                    "content": system_prompt(self.settings.llm_include_chart),
+                    "content": system_prompt(
+                        include_chart=self.settings.llm_include_chart,
+                        include_higher_timeframe=market.higher is not None,
+                    ),
                 },
                 {"role": "user", "content": user_content},
             ],
@@ -80,6 +80,29 @@ class LLMTradingAdvisor:
             reasoning=parsed.reasoning,
         )
         return self._validate_decision(decision, position)
+
+    def _build_chart_images(
+        self,
+        market: MultiTimeframeMarket,
+    ) -> list[tuple[str, str]]:
+        """Lower timeframe chart first, then higher."""
+        images: list[tuple[str, str]] = []
+        symbol = self.settings.symbol
+
+        for series in (market.lower, market.higher):
+            if series is None or not series.candles:
+                continue
+            images.append(
+                (
+                    series.timeframe,
+                    candles_to_chart_png_base64(
+                        series.candles,
+                        symbol=symbol,
+                        timeframe=series.timeframe,
+                    ),
+                )
+            )
+        return images
 
     def _validate_decision(
         self,

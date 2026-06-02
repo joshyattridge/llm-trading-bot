@@ -59,7 +59,12 @@ def _fetch_ohlcv_paginated(
     return collected[-candles:]
 
 
-def fetch_ohlcv_dataframe(settings: Settings, candles: int) -> pd.DataFrame:
+def fetch_ohlcv_dataframe(
+    settings: Settings,
+    candles: int,
+    *,
+    timeframe: str | None = None,
+) -> pd.DataFrame:
     """Fetch the most recent `candles` closed bars for backtesting."""
     if candles < 1:
         raise ValueError("candles must be at least 1")
@@ -76,17 +81,18 @@ def fetch_ohlcv_dataframe(settings: Settings, candles: int) -> pd.DataFrame:
             f"{settings.symbol} is not available on {settings.exchange_id}"
         )
 
+    tf = timeframe or settings.timeframe
     logger.debug(
         "Fetching %d %s candles for %s from %s",
         candles,
-        settings.timeframe,
+        tf,
         settings.symbol,
         settings.exchange_id,
     )
     rows = _fetch_ohlcv_paginated(
         exchange,
         settings.symbol,
-        settings.timeframe,
+        tf,
         candles,
     )
     if len(rows) < candles:

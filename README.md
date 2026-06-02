@@ -61,12 +61,14 @@ llm-bot live
 | `OPENAI_API_KEY` | Required for all modes |
 | `OPENAI_MODEL` | e.g. `gpt-4o-mini` |
 | `OPENAI_BASE_URL` | Optional compatible API |
-| `CANDLE_HISTORY` | Bars sent to LLM (default 50) |
-| `LLM_INCLUDE_CHART` | `true` to send OHLCV JSON plus a candlestick chart image each call (vision model required; default `false`) |
+| `TIMEFRAME` | Lower / execution timeframe (default `1h`) |
+| `HIGHER_TIMEFRAME` | Higher TF for context, e.g. `1d` (empty = disabled) |
+| `CANDLE_HISTORY` | Bars sent per timeframe to the LLM (default 50) |
+| `LLM_INCLUDE_CHART` | `true` to send OHLCV JSON plus one chart per timeframe (vision model required; default `false`) |
 | `STARTING_BALANCE` | Backtest starting cash (default 10000) |
 | `TRADING_STYLE_PROMPT_PATH` | File with trading/risk rules (default `prompts/trading_style.txt`) |
 | `TRADING_STYLE_PROMPT` | Optional inline trading style (overrides path when set) |
-| `EXCHANGE_ID` / `SYMBOL` / `TIMEFRAME` | ccxt settings |
+| `EXCHANGE_ID` / `SYMBOL` | ccxt settings |
 
 Set risk posture and sizing in **`.env`** via `TRADING_STYLE_PROMPT_PATH` or `TRADING_STYLE_PROMPT`, or edit **`prompts/trading_style.txt`** when using the default path.
 
@@ -85,8 +87,9 @@ flowchart LR
 
 **Anti look-ahead**
 
-- LLM payload has `[open, high, low, close, volume]` arrays in time order (no timestamps).
-- With `LLM_INCLUDE_CHART=true`, a candlestick PNG of the same window is also sent (bar index on the x-axis).
+- LLM payload has `[open, high, low, close, volume]` per timeframe (no timestamps).
+- With `HIGHER_TIMEFRAME=1d`, the model gets 50 bars on the lower TF and 50 **fully closed** daily bars (no in-progress day in backtest).
+- With `LLM_INCLUDE_CHART=true`, one labeled candlestick PNG is sent per timeframe (bar index on the x-axis).
 - Live loop drops the **forming** candle (`ohlcv[:-1]`).
 - Backtest waits until `CANDLE_HISTORY` bars exist before first decision.
 
@@ -110,6 +113,7 @@ src/llm_trading_bot/
   config.py           # Settings + style prompt path
   llm/client.py       # OpenAI structured output
   data/serialize.py   # Candle/account JSON for LLM
+  data/market.py      # Multi-timeframe candle bundles
   data/chart.py       # Candlestick PNG for vision models
   trading/engine.py   # Per-candle orchestration
   strategies/         # Backtrader LLMStrategy

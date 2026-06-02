@@ -1,9 +1,16 @@
 import logging
 
 import backtrader as bt
+import pandas as pd
 
 from llm_trading_bot.brokers.backtrader_broker import BacktraderBrokerAdapter
 from llm_trading_bot.config import Settings
+from llm_trading_bot.data.market import (
+    MultiTimeframeMarket,
+    TimeframeSeries,
+    slice_candles_as_of,
+    timeframe_to_timedelta,
+)
 from llm_trading_bot.display import TerminalDisplay
 from llm_trading_bot.llm.client import LLMTradingAdvisor
 from llm_trading_bot.trading.engine import TradingEngine
@@ -18,12 +25,15 @@ class LLMStrategy(bt.Strategy):
         ("settings", None),
         ("total_bars", 0),
         ("display", None),
+        ("higher_ohlcv", None),
     )
 
     def __init__(self):
         settings: Settings = self.p.settings
         display: TerminalDisplay | None = self.p.display
         self._history_len = self.p.candle_history
+        self._settings = settings
+        self._higher_df: pd.DataFrame | None = self.p.higher_ohlcv
         self._advisor = LLMTradingAdvisor(settings)
         self._broker_adapter = BacktraderBrokerAdapter(self)
         self._engine = TradingEngine(
@@ -49,22 +59,22 @@ class LLMStrategy(bt.Strategy):
             self._engine.on_entry_order_settled()
 
     def next(self):
-        # Only act on completed bars (backtrader calls next once per bar at close)
         self._bar_count += 1
         if self._bar_count < self._history_len:
             return
 
-        candles = self._build_history()
+        lower_candles = self._build_lower_history()
+        market = self._build_market(lower_candles)
         self._engine.on_new_candle(
-            candles,
-            candles[-1],
+            market,
+            lower_candles[-1],
             bar=self._bar_count,
             total_bars=self._total_bars or None,
         )
         if not self._engine.waiting_for_order_notify():
             self._engine.flush_display()
 
-    def _build_history(self) -> list[Candle]:
+    def _build_lower_history(self) -> list[Candle]:
         n = self._history_len
         candles: list[Candle] = []
         for i in range(-n, 0):
@@ -78,3 +88,27 @@ class LLMStrategy(bt.Strategy):
                 )
             )
         return candles
+
+    def _build_market(self, lower_candles: list[Candle]) -> MultiTimeframeMarket:
+        lower = TimeframeSeries(timeframe=self._settings.timeframe, candles=lower_candles)
+        higher: TimeframeSeries | None = None
+
+        if self._settings.uses_higher_timeframe() and self._higher_df is not None:
+            bar_open = bt.num2date(self.data.datetime[0])
+            as_of = pd.Timestamp(bar_open, tz="UTC") + timeframe_to_timedelta(
+                self._settings.timeframe
+            )
+            htf = self._settings.higher_timeframe.strip()
+            higher_candles = slice_candles_as_of(
+                self._higher_df,
+                as_of,
+                self._history_len,
+                bar_timeframe=htf,
+            )
+            if higher_candles:
+                higher = TimeframeSeries(
+                    timeframe=self._settings.higher_timeframe.strip(),
+                    candles=higher_candles,
+                )
+
+        return MultiTimeframeMarket(lower=lower, higher=higher)

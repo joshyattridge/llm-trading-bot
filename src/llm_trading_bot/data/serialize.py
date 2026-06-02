@@ -1,15 +1,31 @@
+from llm_trading_bot.data.market import MultiTimeframeMarket, TimeframeSeries
 from llm_trading_bot.trading.models import AccountState, Candle, PositionState
 
 
-def candles_to_prompt(candles: list[Candle]) -> dict:
+def candles_to_prompt(candles: list[Candle], *, timeframe: str) -> dict:
     """
     Serialize candles for the LLM without any dates or indices that imply time.
     Order is oldest → newest (index 0 is earliest visible bar).
     """
     return {
+        "timeframe": timeframe,
         "candle_format": "[open, high, low, close, volume]",
         "candles": [c.as_list() for c in candles],
     }
+
+
+def timeframe_series_to_prompt(series: TimeframeSeries) -> dict:
+    return candles_to_prompt(series.candles, timeframe=series.timeframe)
+
+
+def market_to_prompt(market: MultiTimeframeMarket) -> dict:
+    payload: dict = {
+        "execution_timeframe": market.lower.timeframe,
+        "lower_timeframe": timeframe_series_to_prompt(market.lower),
+    }
+    if market.higher is not None:
+        payload["higher_timeframe"] = timeframe_series_to_prompt(market.higher)
+    return payload
 
 
 def state_to_prompt(

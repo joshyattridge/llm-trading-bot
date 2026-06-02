@@ -5,6 +5,7 @@ import pandas as pd
 
 from llm_trading_bot.config import Settings
 from llm_trading_bot.data.historical import fetch_ohlcv_dataframe
+from llm_trading_bot.data.market import higher_timeframe_fetch_count
 from llm_trading_bot.display import TerminalDisplay
 from llm_trading_bot.strategies.llm_strategy import LLMStrategy
 
@@ -51,14 +52,33 @@ def llm_decision_count(candles: int, candle_history: int) -> int:
     return candles - candle_history + 1
 
 
+def _load_higher_timeframe_df(
+    settings: Settings,
+    lower_bar_count: int,
+) -> pd.DataFrame | None:
+    if not settings.uses_higher_timeframe():
+        return None
+    count = higher_timeframe_fetch_count(settings.candle_history, lower_bar_count)
+    df = fetch_ohlcv_dataframe(
+        settings,
+        count,
+        timeframe=settings.higher_timeframe.strip(),
+    )
+    return _prepare_ohlcv_dataframe(df)
+
+
 def run_backtest(
     settings: Settings,
     ohlcv: pd.DataFrame,
     initial_cash: float = 10_000.0,
     display: TerminalDisplay | None = None,
+    *,
+    higher_ohlcv: pd.DataFrame | None = None,
 ) -> dict:
     prepared = _prepare_ohlcv_dataframe(ohlcv)
     total_bars = len(prepared)
+    if higher_ohlcv is None:
+        higher_ohlcv = _load_higher_timeframe_df(settings, total_bars)
 
     cerebro = bt.Cerebro()
     cerebro.addstrategy(
@@ -67,6 +87,7 @@ def run_backtest(
         candle_history=settings.candle_history,
         total_bars=total_bars,
         display=display,
+        higher_ohlcv=higher_ohlcv,
     )
     cerebro.adddata(dataframe_to_feed(ohlcv))
     cerebro.broker.setcash(initial_cash)
@@ -102,9 +123,11 @@ def run_backtest_from_exchange(
     span_label: str = "",
 ) -> dict:
     if display:
-        display.console.print(
-            f"[dim]Fetching {candles} candles from {settings.exchange_id}…[/]"
-        )
+        htf = settings.higher_timeframe.strip() if settings.uses_higher_timeframe() else None
+        msg = f"[dim]Fetching {candles} {settings.timeframe} candles from {settings.exchange_id}"
+        if htf:
+            msg += f" (+ {htf} higher timeframe)"
+        display.console.print(msg + "…[/]")
     df = fetch_ohlcv_dataframe(settings, candles)
     prepared = _prepare_ohlcv_dataframe(df)
     decisions = llm_decision_count(len(prepared), settings.candle_history)
