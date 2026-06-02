@@ -26,6 +26,18 @@ Rules:
 - Base decisions only on the candle data and account/position provided.
 """
 
+CHART_VISION_ADDENDUM = """
+You also receive a candlestick chart image of the same OHLCV window (x-axis is bar index, not time).
+Use the chart for structure: trendlines, ranges, swing highs/lows, wicks, and rejection zones.
+The numeric OHLCV arrays remain authoritative for exact prices; the chart is for visual context only.
+"""
+
+
+def system_prompt(include_chart: bool = False) -> str:
+    if include_chart:
+        return SYSTEM_PROMPT + CHART_VISION_ADDENDUM
+    return SYSTEM_PROMPT
+
 
 def build_user_message(
     market: dict,
@@ -40,3 +52,26 @@ def build_user_message(
         "state": state,
     }
     return json.dumps(payload, indent=2)
+
+
+def build_user_content(
+    market: dict,
+    state: dict,
+    trading_style: str,
+    *,
+    chart_png_base64: str | None = None,
+) -> str | list[dict]:
+    """OpenAI message content: text only, or text + chart image for vision models."""
+    text = build_user_message(market, state, trading_style)
+    if not chart_png_base64:
+        return text
+    return [
+        {"type": "text", "text": text},
+        {
+            "type": "image_url",
+            "image_url": {
+                "url": f"data:image/png;base64,{chart_png_base64}",
+                "detail": "high",
+            },
+        },
+    ]

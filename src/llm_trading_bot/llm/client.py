@@ -3,8 +3,9 @@ import logging
 from openai import OpenAI
 
 from llm_trading_bot.config import Settings
+from llm_trading_bot.data.chart import candles_to_chart_png_base64
 from llm_trading_bot.data.serialize import candles_to_prompt, state_to_prompt
-from llm_trading_bot.llm.prompts import SYSTEM_PROMPT, build_user_message
+from llm_trading_bot.llm.prompts import build_user_content, system_prompt
 from llm_trading_bot.trading.models import (
     AccountState,
     Action,
@@ -35,7 +36,16 @@ class LLMTradingAdvisor:
     ) -> LLMDecision:
         market = candles_to_prompt(candles)
         state = state_to_prompt(position, account)
-        user_msg = build_user_message(market, state, self._style)
+        chart_b64: str | None = None
+        if self.settings.llm_include_chart:
+            chart_b64 = candles_to_chart_png_base64(
+                candles,
+                symbol=self.settings.symbol,
+                timeframe=self.settings.timeframe,
+            )
+        user_content = build_user_content(
+            market, state, self._style, chart_png_base64=chart_b64
+        )
 
         schema = LLMDecisionResponse.model_json_schema()
         schema["additionalProperties"] = False
@@ -43,8 +53,11 @@ class LLMTradingAdvisor:
         response = self._client.chat.completions.create(
             model=self.settings.openai_model,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_msg},
+                {
+                    "role": "system",
+                    "content": system_prompt(self.settings.llm_include_chart),
+                },
+                {"role": "user", "content": user_content},
             ],
             response_format={
                 "type": "json_schema",

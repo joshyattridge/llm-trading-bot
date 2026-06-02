@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     symbol: str = Field(default="BTC/USDT", validation_alias="SYMBOL")
     timeframe: str = Field(default="1h", validation_alias="TIMEFRAME")
     candle_history: int = Field(default=50, validation_alias="CANDLE_HISTORY")
+    llm_include_chart: bool = Field(
+        default=False,
+        validation_alias="LLM_INCLUDE_CHART",
+        description="Attach a candlestick chart image to each LLM request (vision).",
+    )
 
     ccxt_api_key: str = Field(default="", validation_alias="CCXT_API_KEY")
     ccxt_api_secret: str = Field(default="", validation_alias="CCXT_API_SECRET")
