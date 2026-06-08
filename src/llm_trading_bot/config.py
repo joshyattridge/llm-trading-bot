@@ -36,6 +36,11 @@ class Settings(BaseSettings):
         validation_alias="LLM_INCLUDE_CHART",
         description="Attach a candlestick chart image to each LLM request (vision).",
     )
+    llm_include_drawdown: bool = Field(
+        default=True,
+        validation_alias="LLM_INCLUDE_DRAWDOWN",
+        description="Include peak equity and current drawdown in LLM account state.",
+    )
 
     ccxt_api_key: str = Field(default="", validation_alias="CCXT_API_KEY")
     ccxt_api_secret: str = Field(default="", validation_alias="CCXT_API_SECRET")

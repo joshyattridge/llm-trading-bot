@@ -35,7 +35,11 @@ class LLMTradingAdvisor:
         account: AccountState,
     ) -> LLMDecision:
         market_payload = market_to_prompt(market)
-        state = state_to_prompt(position, account)
+        state = state_to_prompt(
+            position,
+            account,
+            include_drawdown=self.settings.llm_include_drawdown,
+        )
         chart_images = self._build_chart_images(market) if self.settings.llm_include_chart else None
         user_content = build_user_content(
             market_payload,
@@ -55,6 +59,7 @@ class LLMTradingAdvisor:
                     "content": system_prompt(
                         include_chart=self.settings.llm_include_chart,
                         include_higher_timeframe=market.higher is not None,
+                        include_drawdown=self.settings.llm_include_drawdown,
                     ),
                 },
                 {"role": "user", "content": user_content},

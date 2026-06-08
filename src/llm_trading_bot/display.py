@@ -209,12 +209,16 @@ class TerminalDisplay:
         table.add_column(style="dim", min_width=14)
         table.add_column(justify="right")
         table.add_row("Symbol", settings.symbol)
+        if result.get("window"):
+            table.add_row("Window", result["window"])
         table.add_row("Candles", str(result["candles"]))
         table.add_row("LLM decisions", str(result["llm_decisions"]))
         table.add_row("Start", f"${result['start_value']:,.2f}")
         table.add_row("End", f"${result['end_value']:,.2f}")
         table.add_row("PnL", f"[{pnl_style}]${pnl:,.2f}[/]")
         table.add_row("Return", f"[{ret_style}]{ret:+.2f}%[/]")
+        if "max_drawdown_pct" in result:
+            table.add_row("Max drawdown", f"{result['max_drawdown_pct']:.2f}%")
 
         self.console.print()
         self.console.print(Panel(table, border_style="cyan", padding=(1, 2)))

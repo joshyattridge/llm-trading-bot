@@ -17,6 +17,7 @@ from llm_trading_bot.trading.models import (
     LLMDecision,
     PositionSide,
 )
+from llm_trading_bot.trading.drawdown import DrawdownTracker
 from llm_trading_bot.trading.stops import StopHit, check_stop_hit
 
 if TYPE_CHECKING:
@@ -46,6 +47,7 @@ class TradingEngine:
         self.timeframe = timeframe
         self.commission_rate = commission_rate
         self.leverage = leverage
+        self._drawdown_tracker = DrawdownTracker()
         self._bars_in_trade = 0
         self._pending_panel: dict[str, Any] | None = None
         self._display_flushed = False
@@ -108,6 +110,7 @@ class TradingEngine:
                 update={"bars_in_trade": self._bars_in_trade},
             )
         account = self.broker.get_account(mark_price=close_price)
+        account = self._drawdown_tracker.enrich_account(account)
 
         decision = self.advisor.decide(market, position, account)
         sizing_price = None

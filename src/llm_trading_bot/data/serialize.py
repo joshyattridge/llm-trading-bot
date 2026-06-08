@@ -31,6 +31,8 @@ def market_to_prompt(market: MultiTimeframeMarket) -> dict:
 def state_to_prompt(
     position: PositionState,
     account: AccountState,
+    *,
+    include_drawdown: bool = False,
 ) -> dict:
     pos: dict = {"side": position.side.value}
     if position.pending_entry:
@@ -45,12 +47,17 @@ def state_to_prompt(
         if position.take_profit is not None:
             pos["take_profit"] = position.take_profit
 
+    account_payload: dict = {
+        "balance": account.balance,
+        "equity": account.equity,
+        "available_cash": account.available_cash,
+        "currency": account.currency,
+    }
+    if include_drawdown and account.peak_equity is not None and account.drawdown_pct is not None:
+        account_payload["peak_equity"] = account.peak_equity
+        account_payload["drawdown_pct"] = account.drawdown_pct
+
     return {
         "position": pos,
-        "account": {
-            "balance": account.balance,
-            "equity": account.equity,
-            "available_cash": account.available_cash,
-            "currency": account.currency,
-        },
+        "account": account_payload,
     }

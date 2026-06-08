@@ -28,6 +28,11 @@ Rules:
 - Trades execute on the lower (execution) timeframe only.
 """
 
+DRAWDOWN_ADDENDUM = """
+You also receive peak_equity and drawdown_pct (current drawdown from peak as a percentage, 0 when at peak).
+Use drawdown to reduce risk or pause new entries after meaningful losses; do not chase losses.
+"""
+
 CHART_VISION_ADDENDUM = """
 You also receive candlestick chart images (one per timeframe when higher TF is enabled).
 Each chart is labeled with its timeframe. X-axis is bar index, not clock time.
@@ -36,8 +41,15 @@ Numeric OHLCV arrays remain authoritative for exact prices; charts are for visua
 """
 
 
-def system_prompt(*, include_chart: bool = False, include_higher_timeframe: bool = False) -> str:
+def system_prompt(
+    *,
+    include_chart: bool = False,
+    include_higher_timeframe: bool = False,
+    include_drawdown: bool = False,
+) -> str:
     prompt = SYSTEM_PROMPT
+    if include_drawdown:
+        prompt += DRAWDOWN_ADDENDUM
     if include_chart or include_higher_timeframe:
         prompt += CHART_VISION_ADDENDUM
     return prompt

@@ -61,6 +61,8 @@ class AccountState(BaseModel):
     equity: float  # total portfolio value at mark (cash + positions)
     available_cash: float  # quote free to deploy on new entries
     currency: str = "USDT"
+    peak_equity: float | None = None  # high-water mark for drawdown
+    drawdown_pct: float | None = None  # current drawdown from peak, 0–100
 
 
 class LLMDecision(BaseModel):

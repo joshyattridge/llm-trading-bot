@@ -2,43 +2,25 @@ import typer
 from rich.console import Console
 
 from llm_trading_bot.config import get_settings
-from llm_trading_bot.data.historical import MAX_FETCH_LIMIT
 from llm_trading_bot.display import TerminalDisplay, configure_logging
-from llm_trading_bot.runners.backtest import (
-    llm_decision_count,
-    run_backtest_from_exchange,
-)
+from llm_trading_bot.runners.backtest import run_backtest_for_range
 from llm_trading_bot.runners.live import run_live_loop
 
 app = typer.Typer(help="LLM trading bot — backtest, paper, and live modes.")
 console = Console()
 
 
-def _timeframe_duration_label(timeframe: str, candles: int) -> str:
-    """Human-readable span, e.g. 50 × 1h ≈ 50 hours."""
-    for suffix in ("m", "h", "d", "w"):
-        if timeframe.endswith(suffix) and timeframe[:-1].isdigit():
-            n = int(timeframe[:-1])
-            plural = {
-                "m": ("minute", "minutes"),
-                "h": ("hour", "hours"),
-                "d": ("day", "days"),
-                "w": ("week", "weeks"),
-            }[suffix]
-            name = plural[0] if n == 1 else plural[1]
-            return f"{candles} × {timeframe} ≈ {candles * n} {name}"
-    return f"{candles} × {timeframe}"
-
-
 @app.command()
 def backtest(
-    candles: int = typer.Option(
+    from_date: str = typer.Option(
         ...,
-        "--candles",
-        "-n",
-        min=1,
-        max=MAX_FETCH_LIMIT,
-        help="Number of candles to backtest (length follows TIMEFRAME, e.g. 50 + 1h = ~50 hours).",
+        "--from",
+        help="Start of backtest window (UTC), e.g. 2025-01-01",
+    ),
+    to_date: str = typer.Option(
+        ...,
+        "--to",
+        help="End of backtest window, inclusive for date-only values, e.g. 2025-01-07",
     ),
     cash: float | None = typer.Option(
         None,
@@ -47,33 +29,28 @@ def backtest(
     ),
     verbose: bool = typer.Option(False, "-v", "--verbose"),
 ) -> None:
-    """Backtest on historical OHLCV fetched from the exchange."""
+    """Backtest on historical OHLCV fetched from the exchange for a date range."""
     configure_logging(verbose)
     settings = get_settings()
     if not settings.openai_api_key:
         typer.echo("Set OPENAI_API_KEY in .env before running.", err=True)
         raise typer.Exit(1)
 
-    decisions = llm_decision_count(candles, settings.candle_history)
-    if decisions == 0:
-        typer.echo(
-            f"--candles ({candles}) must be greater than CANDLE_HISTORY "
-            f"({settings.candle_history}) to run any LLM decisions.",
-            err=True,
-        )
-        raise typer.Exit(1)
-
     initial_cash = cash if cash is not None else settings.starting_balance
-    span = _timeframe_duration_label(settings.timeframe, candles)
     display = TerminalDisplay()
 
-    result = run_backtest_from_exchange(
-        settings,
-        candles,
-        initial_cash=initial_cash,
-        display=display,
-        span_label=span,
-    )
+    try:
+        result = run_backtest_for_range(
+            settings,
+            from_date,
+            to_date,
+            initial_cash=initial_cash,
+            display=display,
+        )
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from exc
+
     display.print_backtest_summary(result, settings)
 
 

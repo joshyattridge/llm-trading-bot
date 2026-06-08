@@ -9,6 +9,7 @@ import pandas as pd
 
 from llm_trading_bot.brokers.ccxt_broker import create_exchange
 from llm_trading_bot.config import Settings
+from llm_trading_bot.data.range import BacktestDateRange
 
 logger = logging.getLogger(__name__)
 
@@ -18,60 +19,72 @@ EXCHANGE_BATCH_LIMIT = 1000
 MAX_FETCH_LIMIT = 5000
 
 
-def _fetch_ohlcv_paginated(
+def _rows_to_dataframe(rows: list[list[float]]) -> pd.DataFrame:
+    df = pd.DataFrame(
+        rows,
+        columns=["timestamp", "open", "high", "low", "close", "volume"],
+    )
+    df["datetime"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+    df = df.drop(columns=["timestamp"])
+    df = df.drop_duplicates(subset=["datetime"], keep="last")
+    df = df.sort_index()
+    return df.set_index("datetime")[["open", "high", "low", "close", "volume"]]
+
+
+def _fetch_ohlcv_range(
     exchange: ccxt.Exchange,
     symbol: str,
     timeframe: str,
-    candles: int,
+    since_ms: int,
+    until_ms: int,
 ) -> list[list[float]]:
-    """Fetch up to `candles` most recent closed bars, paginating if needed."""
-    if candles <= EXCHANGE_BATCH_LIMIT:
-        rows = exchange.fetch_ohlcv(symbol, timeframe, limit=candles)
-        return rows
-
+    """Fetch bars with open time in [since_ms, until_ms], paginating forward."""
     collected: list[list[float]] = []
-    end_time: int | None = None
+    cursor = since_ms
 
-    while len(collected) < candles:
-        remaining = candles - len(collected)
-        batch_limit = min(remaining, EXCHANGE_BATCH_LIMIT)
-        kwargs: dict = {"limit": batch_limit}
-        if end_time is not None:
-            kwargs["params"] = {"endTime": end_time}
-
-        batch = exchange.fetch_ohlcv(symbol, timeframe, **kwargs)
+    while cursor <= until_ms and len(collected) < MAX_FETCH_LIMIT:
+        batch = exchange.fetch_ohlcv(
+            symbol,
+            timeframe,
+            since=cursor,
+            limit=EXCHANGE_BATCH_LIMIT,
+        )
         if not batch:
             break
 
-        if collected:
-            oldest_collected = collected[0][0]
-            batch = [row for row in batch if row[0] < oldest_collected]
+        for row in batch:
+            ts = row[0]
+            if ts < since_ms:
+                continue
+            if ts >= until_ms:
+                break
+            collected.append(row)
 
-        if not batch:
+        if batch[-1][0] >= until_ms or len(batch) < EXCHANGE_BATCH_LIMIT:
             break
 
-        collected = batch + collected
-        end_time = batch[0][0] - 1
+        cursor = batch[-1][0] + 1
 
-        if len(batch) < batch_limit:
-            break
-
-    return collected[-candles:]
+    return collected
 
 
-def fetch_ohlcv_dataframe(
+def fetch_ohlcv_dataframe_for_range(
     settings: Settings,
-    candles: int,
+    window: BacktestDateRange,
     *,
     timeframe: str | None = None,
+    warmup_bars: int = 0,
 ) -> pd.DataFrame:
-    """Fetch the most recent `candles` closed bars for backtesting."""
-    if candles < 1:
-        raise ValueError("candles must be at least 1")
-    if candles > MAX_FETCH_LIMIT:
-        raise ValueError(
-            f"candles must be <= {MAX_FETCH_LIMIT} (paginated fetch limit)"
-        )
+    """Fetch OHLCV for a backtest window plus optional warmup bars before start."""
+    tf = timeframe or settings.timeframe
+    fetch_start = window.start
+    if warmup_bars > 0:
+        from llm_trading_bot.data.market import timeframe_to_timedelta
+
+        fetch_start = fetch_start - warmup_bars * timeframe_to_timedelta(tf)
+
+    since_ms = int(fetch_start.timestamp() * 1000)
+    until_ms = int(window.end_exclusive.timestamp() * 1000)
 
     exchange = create_exchange(settings, sandbox=False)
     exchange.load_markets()
@@ -81,30 +94,42 @@ def fetch_ohlcv_dataframe(
             f"{settings.symbol} is not available on {settings.exchange_id}"
         )
 
-    tf = timeframe or settings.timeframe
     logger.debug(
-        "Fetching %d %s candles for %s from %s",
-        candles,
+        "Fetching %s %s candles for %s from %s (%s → %s)",
         tf,
         settings.symbol,
         settings.exchange_id,
+        fetch_start,
+        window.end_exclusive,
     )
-    rows = _fetch_ohlcv_paginated(
+    rows = _fetch_ohlcv_range(
         exchange,
         settings.symbol,
         tf,
-        candles,
+        since_ms,
+        until_ms,
     )
-    if len(rows) < candles:
+    if not rows:
         raise RuntimeError(
-            f"Exchange returned {len(rows)} candles, expected {candles}"
+            f"Exchange returned no candles for {window.label()} on {tf}"
         )
 
-    df = pd.DataFrame(
-        rows,
-        columns=["timestamp", "open", "high", "low", "close", "volume"],
+    df = _rows_to_dataframe(rows)
+    if len(df) > MAX_FETCH_LIMIT:
+        raise ValueError(
+            f"Date range requires {len(df)} bars, exceeding limit of {MAX_FETCH_LIMIT}"
+        )
+    return df
+
+
+def fetch_backtest_dataframe(
+    settings: Settings,
+    window: BacktestDateRange,
+) -> pd.DataFrame:
+    """Fetch lower-timeframe OHLCV with warmup for the given backtest window."""
+    warmup = max(settings.candle_history - 1, 0)
+    return fetch_ohlcv_dataframe_for_range(
+        settings,
+        window,
+        warmup_bars=warmup,
     )
-    df["datetime"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
-    df = df.drop(columns=["timestamp"])
-    df = df.set_index("datetime")
-    return df[["open", "high", "low", "close", "volume"]]
