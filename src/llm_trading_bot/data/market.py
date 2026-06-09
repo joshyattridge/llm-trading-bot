@@ -3,10 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 import pandas as pd
 
 from llm_trading_bot.trading.models import Candle
+
+
+def bar_time_fields(ts: datetime | pd.Timestamp) -> tuple[str, str]:
+    """Candle open time (UTC) and day name — no calendar date."""
+    stamp = pd.Timestamp(ts)
+    if stamp.tzinfo is None:
+        stamp = stamp.tz_localize("UTC")
+    else:
+        stamp = stamp.tz_convert("UTC")
+    return stamp.strftime("%H:%M:%S"), stamp.day_name()
 
 
 @dataclass(frozen=True)
@@ -26,6 +37,7 @@ class MultiTimeframeMarket:
 def dataframe_to_candles(df: pd.DataFrame) -> list[Candle]:
     candles: list[Candle] = []
     for row in df.itertuples():
+        bar_time, day_of_week = bar_time_fields(row.Index)
         candles.append(
             Candle(
                 open=float(row.open),
@@ -33,6 +45,8 @@ def dataframe_to_candles(df: pd.DataFrame) -> list[Candle]:
                 low=float(row.low),
                 close=float(row.close),
                 volume=float(row.volume),
+                bar_time=bar_time,
+                day_of_week=day_of_week,
             )
         )
     return candles

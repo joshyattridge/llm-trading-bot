@@ -8,6 +8,7 @@ from llm_trading_bot.config import Settings
 from llm_trading_bot.data.market import (
     MultiTimeframeMarket,
     TimeframeSeries,
+    bar_time_fields,
     slice_candles_as_of,
     timeframe_to_timedelta,
 )
@@ -80,6 +81,7 @@ class LLMStrategy(bt.Strategy):
         n = self._history_len
         candles: list[Candle] = []
         for i in backtrader_candle_indices(n):
+            bar_time, day_of_week = bar_time_fields(bt.num2date(self.data.datetime[i]))
             candles.append(
                 Candle(
                     open=float(self.data.open[i]),
@@ -87,6 +89,8 @@ class LLMStrategy(bt.Strategy):
                     low=float(self.data.low[i]),
                     close=float(self.data.close[i]),
                     volume=float(self.data.volume[i]),
+                    bar_time=bar_time,
+                    day_of_week=day_of_week,
                 )
             )
         return candles

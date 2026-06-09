@@ -19,16 +19,29 @@ class PositionSide(str, Enum):
 
 
 class Candle(BaseModel):
-    """OHLCV only — no timestamp to avoid look-ahead bias in the LLM."""
+    """OHLCV plus bar open time metadata (no calendar date) for session-aware logic."""
 
     open: float
     high: float
     low: float
     close: float
     volume: float
+    bar_time: str | None = None  # HH:MM:SS UTC — candle open
+    day_of_week: str | None = None  # e.g. Monday
 
     def as_list(self) -> list[float]:
         return [self.open, self.high, self.low, self.close, self.volume]
+
+    def to_prompt_dict(self) -> dict:
+        return {
+            "bar_time": self.bar_time,
+            "day_of_week": self.day_of_week,
+            "open": self.open,
+            "high": self.high,
+            "low": self.low,
+            "close": self.close,
+            "volume": self.volume,
+        }
 
 
 class ExecutionOutcome(str, Enum):

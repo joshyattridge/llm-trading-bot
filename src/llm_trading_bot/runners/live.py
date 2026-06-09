@@ -1,9 +1,11 @@
 import logging
 import time
 
+import pandas as pd
+
 from llm_trading_bot.brokers.ccxt_broker import CcxtBrokerAdapter, create_exchange
 from llm_trading_bot.config import Settings
-from llm_trading_bot.data.market import MultiTimeframeMarket, TimeframeSeries
+from llm_trading_bot.data.market import MultiTimeframeMarket, TimeframeSeries, bar_time_fields
 from llm_trading_bot.display import TerminalDisplay
 from llm_trading_bot.llm.client import LLMTradingAdvisor
 from llm_trading_bot.trading.engine import TradingEngine
@@ -13,11 +15,22 @@ logger = logging.getLogger(__name__)
 
 
 def _ohlcv_to_candles(rows: list[list]) -> list[Candle]:
-    """ccxt OHLCV rows include ms timestamps — never pass those to the LLM."""
+    """ccxt OHLCV rows: expose bar open time and day of week only (no calendar date)."""
     candles = []
     for row in rows:
+        bar_time, day_of_week = bar_time_fields(pd.Timestamp(row[0], unit="ms", tz="UTC"))
         o, h, l, c, v = row[1], row[2], row[3], row[4], row[5]
-        candles.append(Candle(open=o, high=h, low=l, close=c, volume=v))
+        candles.append(
+            Candle(
+                open=o,
+                high=h,
+                low=l,
+                close=c,
+                volume=v,
+                bar_time=bar_time,
+                day_of_week=day_of_week,
+            )
+        )
     return candles
 
 

@@ -1,13 +1,189 @@
-make money and try and target 1.5 RR
-wait for good pullbacks and rejections to key levels before entering
-adjust stops cautiously to protect profits but dont be too tight give the trade room to breathe
-If price is ranging and not trending try to trade the range using bollinger bands or RSI to get a mean reversion trade
+# ORB + VWAP Retest Day Trading Strategy
+# Research-backed intraday system. Reddit/trader-community consensus: raw Opening Range Breakout alone is unreliable; the refined version below (ORB + VWAP alignment + retest entry + strict risk rules) is what experienced traders actually use. Widely discussed on r/daytrading, r/FuturesTrading, and r/options with repeated emphasis on VWAP filters, retest entries (not blind breakout chasing), the 1% rule, and daily loss caps.
 
-Align entries with higher-timeframe bias when higher timeframe data is present.
-On entries, place long stops below entry and take-profit above; short stops above entry and take-profit below.
-On adjust_stops you may trail or tighten levels (e.g. move stop to breakeven).
+## Core edge
+Trade institutional morning momentum, not retail breakout traps. Mark the opening range (OR), wait for a confirmed break, then enter on the retest — only when price aligns with session VWAP and higher-timeframe bias. Skip chop. Let winners run to at least 2R; cut losers fast at structure.
 
-When peak_equity and drawdown_pct are provided: use drawdown to reduce risk or pause new entries after meaningful losses; do not chase losses.
-When trade_history is provided: use consecutive_losses and net_pnl to reduce risk or pause new entries after a losing streak; avoid revenge trading. Use recent outcomes to judge whether your setups are working in the current regime before entering again.
+---
 
-When chart images are provided: use them for structure — trendlines, ranges, swing highs/lows, wicks, and rejection zones. Numeric OHLCV arrays remain authoritative for exact prices.
+## 1. Key levels (compute from OHLCV; numeric arrays are authoritative)
+
+### Opening Range (OR)
+- OR period = the earliest 3 bars on the lower timeframe in the visible window (scale to 6 bars if the execution timeframe is 1m–3m; use 3 bars if 5m–15m).
+- OR High = highest high of those bars.
+- OR Low = lowest low of those bars.
+- OR Mid = (OR High + OR Low) / 2.
+- OR Range = OR High − OR Low.
+- Do not enter during OR formation; only after the OR period has completed.
+
+### Session VWAP (approximate from visible bars)
+- Typical price per bar = (high + low + close) / 3.
+- VWAP = cumulative(typical_price × volume) / cumulative(volume) over all lower-TF bars from index 0 (earliest visible) through the current bar.
+- VWAP slope: rising if VWAP on the last 3 bars is higher than 3 bars ago; falling if lower.
+
+### Higher-timeframe bias (when higher_timeframe data is present)
+- Bullish HTF: higher-TF close above its 20-bar simple moving average AND last 3 higher-TF closes trending up.
+- Bearish HTF: higher-TF close below its 20-bar SMA AND last 3 higher-TF closes trending down.
+- Neutral/chop: neither condition met — reduce size and prefer mean-reversion only; skip breakout setups.
+
+### ATR (volatility filter)
+- ATR(14) on lower timeframe from true range = max(high−low, |high−prev_close|, |low−prev_close|).
+- Minimum OR Range ≥ 0.5 × ATR(14); if OR is tighter, skip — not enough room for a clean stop.
+
+---
+
+## 2. Trade setups (priority order)
+
+### Setup A — ORB Retest Continuation (PRIMARY; highest community consensus)
+Use when the market is trending, not ranging.
+
+**Long conditions (ALL required):**
+1. A lower-TF candle CLOSED above OR High (wick-only breaks do not count).
+2. Breakout candle volume ≥ 1.5× average volume of the prior 10 bars.
+3. Price is above VWAP AND VWAP slope is rising or flat.
+4. HTF bias is bullish (or neutral with strong volume — then use half risk).
+5. Retest: price pulls back to OR High (within 0.25 × OR Range) OR to VWAP, then prints a bullish rejection (long lower wick, engulfing, or close back above the retest level).
+6. Entry on close of the rejection candle. Do not chase if price is already > 1.0 × OR Range above OR High.
+
+**Short conditions:** mirror all rules (close below OR Low, below VWAP, bearish HTF, retest of OR Low or VWAP from below, bearish rejection).
+
+**Invalidation:** if price closes back inside the OR (between OR Low and OR High) after your entry, close the trade — the breakout failed.
+
+### Setup B — Failed Breakout / Liquidity Sweep (SECONDARY; high-probability reversal)
+Reddit/Smart Money traders cite this as the best edge when retail gets trapped on false ORB breaks.
+
+**Long (sweep of OR Low):**
+1. Price wicks below OR Low then closes back inside the OR within 1–3 bars (fast rejection).
+2. Sweep wick extends ≤ 1.5 × OR Range below OR Low (deeper = likely real breakdown, not a sweep).
+3. Enter long on close of the reversal candle OR on retest of OR Low from below.
+4. Prefer: price still above VWAP or reclaiming VWAP on the reversal bar.
+
+**Short (sweep of OR High):** mirror rules above OR High.
+
+### Setup C — VWAP Pullback (FALLBACK when no ORB setup; midday continuation)
+When price has trended away from OR for ≥ 6 bars without a fresh ORB signal:
+
+**Long:** price held above VWAP for ≥ 6 bars → pullback to VWAP on decreasing volume → bullish rejection at VWAP → enter on rejection close. HTF must be bullish or neutral.
+
+**Short:** mirror below VWAP with bearish HTF.
+
+---
+
+## 3. No-trade filters (skip new entries)
+- OR Range < 0.5 × ATR(14).
+- Price chopping inside OR for > 12 bars after OR forms (no directional commitment).
+- Breakout without volume confirmation (< 1.5× 10-bar average).
+- Long setup while price is below VWAP, or short while above VWAP (VWAP filter is non-negotiable for Setup A).
+- HTF strongly opposes your direction (e.g., long ORB when HTF is clearly bearish).
+- Reward-to-risk to first target would be < 2:1 at entry.
+- Already at daily loss limit or consecutive-loss limit (see Section 6).
+- When chart images show overlapping wicks and no clear structure at the retest level.
+
+---
+
+## 4. Stop loss (structure-based; set BEFORE entry)
+
+| Setup | Long stop | Short stop |
+|-------|-----------|------------|
+| A — ORB Retest | Below OR Low (conservative) OR below retest swing low, whichever is tighter but still beyond noise. Add 0.1 × ATR buffer below the level. | Above OR High or above retest swing high + 0.1 × ATR |
+| B — Liquidity Sweep | Below the sweep wick low + 0.15 × ATR (not on the wick itself) | Above sweep wick high + 0.15 × ATR |
+| C — VWAP Pullback | Below VWAP or below pullback swing low, whichever is lower + 0.1 × ATR | Above VWAP or above pullback swing high + 0.1 × ATR |
+
+**Max stop cap:** if stop distance > 1.5 × OR Range, skip the trade — risk is too wide for the setup.
+**Never** place stops at arbitrary percentages; always anchor to structure (OR boundary, sweep wick, VWAP, swing).
+
+---
+
+## 5. Take profit (minimum 2:1 R:R; scale out)
+
+Define 1R = |entry_price − stop_loss|.
+
+| Target | Level | Action |
+|--------|-------|--------|
+| T1 | Entry + 1.0R (long) / Entry − 1.0R (short) | Mental partial — on adjust_stops, move stop to breakeven (entry price) once T1 is reached or price closes beyond T1 |
+| T2 | Entry + 2.0R / Entry − 2.0R | Primary take_profit for new entries (default) |
+| T3 | Next obvious structure: prior session high/low, HTF swing, or OR Range projected from breakout (Entry + 1.0 × OR Range for longs) | Trail remainder; use adjust_stops to trail stop to OR Mid or last swing low/high |
+
+**Minimum rule:** take_profit on entry must be ≥ 2.0R unless a closer structural level within 1.5R–2.5R is the only logical target — never accept < 1.5R.
+**Trend days:** after T2 hit, trail stop under each higher low (long) or above each lower high (short) by 0.25 × ATR.
+
+---
+
+## 6. Position sizing & balance management (1% rule — universal Reddit/pro consensus)
+
+### Per-trade risk
+- Default risk_pct = 0.01 (1% of equity). This is the fraction of equity lost if stop_loss is hit.
+- Position size is computed by the engine from risk_pct and stop distance — your job is to set a valid structural stop and appropriate risk_pct.
+- Beginners / uncertain regime: risk_pct = 0.005 (0.5%).
+- Maximum risk_pct per trade: 0.01 unless equity is at all-time high AND last 3 trades were winners — then cap at 0.015.
+
+### Daily loss limit
+- Stop ALL new entries when cumulative realized losses in trade_history net_pnl for the session would exceed 3% of equity, OR when trade_history shows losses summing to 3× your per-trade dollar risk.
+- If account drawdown_pct ≥ 5% from peak_equity: risk_pct = 0.005 and only take Setup A with full confluence (no Setup B/C).
+- If drawdown_pct ≥ 10%: no new entries until drawdown recovers below 8%.
+
+### Consecutive-loss circuit breaker (widely recommended on r/daytrading)
+- If trade_history.consecutive_losses ≥ 2: no new entries (hold flat) until at least 6 lower-TF bars pass OR consecutive_losses resets.
+- If consecutive_losses ≥ 3: no new entries for the rest of the visible session; risk_pct = 0 on any tempted setup.
+
+### Winning streak / balance protection
+- After 2 consecutive wins: maintain risk_pct at 0.01; do not increase size mid-streak.
+- After daily net profit ≥ 2R (sum of recent winners): stop new entries for the session — protect the day.
+- Never risk more than available_cash allows; if unsure, reduce risk_pct.
+
+### Revenge-trading ban
+- Do not enter within 3 bars of a stop_loss exit unless Setup B (sweep) presents with full confluence.
+- Do not double risk_pct to “make back” a loss. Ever.
+
+---
+
+## 7. Trade management (adjust_stops & close)
+
+### adjust_stops rules
+- At +1.0R unrealized: move stop_loss to breakeven (entry_price).
+- At +1.5R: trail stop to OR Mid (long) or lock in +0.5R minimum.
+- At +2.0R: trail stop to last swing low/high on lower TF.
+- Never tighten stop to within 0.2 × ATR of current price unless a clear reversal candle closes against you.
+- Give trades room: minimum stop distance after breakeven move = 0.3 × ATR.
+
+### close rules (exit early)
+- Close if setup invalidation triggers (price closes back inside OR against your position).
+- Close if VWAP is lost on a closing candle (long below VWAP, short above VWAP) after being in trade ≥ 3 bars.
+- Close if unrealized profit retraces > 50% from peak unrealized_pnl in trade.
+- Close before session end if bars_in_trade is very extended and momentum stalls (≥ 3 bars with shrinking range).
+
+---
+
+## 8. Regime selection
+
+| Regime | Detection | Action |
+|--------|-----------|--------|
+| Trend up | Price > VWAP, HTF bullish, OR break upward | Setups A, C long only |
+| Trend down | Price < VWAP, HTF bearish, OR break downward | Setups A, C short only |
+| Range/chop | Price crossing VWAP repeatedly; inside OR > 12 bars | No Setup A; only Setup B sweeps with tight stops |
+| High volatility | ATR > 1.5× its 20-bar average | Half risk_pct; require Setup A only |
+
+---
+
+## 9. Bot integration
+
+- Align all entries with higher-timeframe bias when higher_timeframe data is present.
+- On enter_long: stop_loss below entry, take_profit above entry.
+- On enter_short: stop_loss above entry, take_profit below entry.
+- On adjust_stops: trail or tighten per Section 7; risk_pct = 0.
+- When peak_equity and drawdown_pct are provided: apply Section 6 drawdown rules.
+- When trade_history is provided: apply consecutive_losses and net_pnl rules in Section 6; judge whether ORB/VWAP setups are working in the current regime before re-entering.
+- When chart images are provided: use them to confirm OR boundaries, VWAP retests, sweep wicks, swing structure, and rejection candles. Numeric OHLCV plus bar_time/day_of_week in the payload remain authoritative for exact prices and session timing.
+
+---
+
+## 10. Decision checklist (before every enter_long / enter_short)
+1. Which setup (A, B, or C)? All conditions met?
+2. VWAP alignment correct? Volume confirmed?
+3. Stop placed at structure with buffer? Stop ≤ 1.5 × OR Range?
+4. take_profit ≥ 2.0R?
+5. risk_pct ≤ 0.01 given drawdown and consecutive_losses?
+6. Daily loss limit not breached?
+7. HTF not opposing?
+
+If any answer is no → action = hold.

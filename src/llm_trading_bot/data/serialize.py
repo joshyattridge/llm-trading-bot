@@ -4,13 +4,17 @@ from llm_trading_bot.trading.models import AccountState, Candle, PositionState
 
 def candles_to_prompt(candles: list[Candle], *, timeframe: str) -> dict:
     """
-    Serialize candles for the LLM without any dates or indices that imply time.
-    Order is oldest → newest (index 0 is earliest visible bar).
+    Serialize candles for the LLM with bar open time and day of week (UTC).
+    Calendar dates are omitted. Order is oldest → newest (index 0 is earliest).
     """
     return {
         "timeframe": timeframe,
-        "candle_format": "[open, high, low, close, volume]",
-        "candles": [c.as_list() for c in candles],
+        "candle_format": {
+            "bar_time": "HH:MM:SS UTC (candle open)",
+            "day_of_week": "Monday–Sunday",
+            "ohlcv": "open, high, low, close, volume",
+        },
+        "candles": [c.to_prompt_dict() for c in candles],
     }
 
 

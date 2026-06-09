@@ -9,7 +9,7 @@ import backtrader as bt
 import pandas as pd
 
 from llm_trading_bot.brokers.backtrader_broker import BacktraderBrokerAdapter
-from llm_trading_bot.data.market import MultiTimeframeMarket, TimeframeSeries
+from llm_trading_bot.data.market import MultiTimeframeMarket, TimeframeSeries, bar_time_fields
 from llm_trading_bot.trading.engine import TradingEngine
 from llm_trading_bot.trading.models import Action, Candle
 from llm_trading_bot.trading.stops import backtrader_candle_indices
@@ -48,16 +48,21 @@ def load_btc_fixture() -> pd.DataFrame:
 
 def fixture_candles(df: pd.DataFrame, count: int | None = None) -> list[Candle]:
     subset = df if count is None else df.iloc[:count]
-    return [
-        Candle(
-            open=float(row.open),
-            high=float(row.high),
-            low=float(row.low),
-            close=float(row.close),
-            volume=float(row.volume),
+    candles: list[Candle] = []
+    for row in subset.itertuples():
+        bar_time, day_of_week = bar_time_fields(row.Index)
+        candles.append(
+            Candle(
+                open=float(row.open),
+                high=float(row.high),
+                low=float(row.low),
+                close=float(row.close),
+                volume=float(row.volume),
+                bar_time=bar_time,
+                day_of_week=day_of_week,
+            )
         )
-        for row in subset.itertuples()
-    ]
+    return candles
 
 
 class ScriptedEngineStrategy(bt.Strategy):
@@ -102,6 +107,7 @@ class ScriptedEngineStrategy(bt.Strategy):
         n = self.p.history_len
         candles: list[Candle] = []
         for i in backtrader_candle_indices(n):
+            bar_time, day_of_week = bar_time_fields(bt.num2date(self.data.datetime[i]))
             candles.append(
                 Candle(
                     open=float(self.data.open[i]),
@@ -109,6 +115,8 @@ class ScriptedEngineStrategy(bt.Strategy):
                     low=float(self.data.low[i]),
                     close=float(self.data.close[i]),
                     volume=float(self.data.volume[i]),
+                    bar_time=bar_time,
+                    day_of_week=day_of_week,
                 )
             )
         market = MultiTimeframeMarket(
