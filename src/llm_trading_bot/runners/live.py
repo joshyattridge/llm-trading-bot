@@ -78,6 +78,7 @@ def run_live_loop(
         timeframe=settings.timeframe,
         commission_rate=settings.commission_rate,
         leverage=settings.leverage,
+        trade_history_limit=settings.trade_history_limit,
     )
 
     last_ts: int | None = None

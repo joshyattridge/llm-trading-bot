@@ -33,6 +33,13 @@ You also receive peak_equity and drawdown_pct (current drawdown from peak as a p
 Use drawdown to reduce risk or pause new entries after meaningful losses; do not chase losses.
 """
 
+TRADE_HISTORY_ADDENDUM = """
+You also receive trade_history with recent closed trades (oldest first in recent_trades) and streak stats.
+Each trade includes side, entry_price, exit_price, realized_pnl, bars_held, and exit_reason (stop_loss, take_profit, or llm_close).
+Use consecutive_losses and net_pnl to reduce risk or pause new entries after a losing streak; avoid revenge trading.
+Use recent outcomes to spot whether your setups are working in the current regime before entering again.
+"""
+
 CHART_VISION_ADDENDUM = """
 You also receive candlestick chart images (one per timeframe when higher TF is enabled).
 Each chart is labeled with its timeframe. X-axis is bar index, not clock time.
@@ -48,10 +55,13 @@ def system_prompt(
     include_chart: bool = False,
     include_higher_timeframe: bool = False,
     include_drawdown: bool = False,
+    include_trade_history: bool = False,
 ) -> str:
     prompt = SYSTEM_PROMPT
     if include_drawdown:
         prompt += DRAWDOWN_ADDENDUM
+    if include_trade_history:
+        prompt += TRADE_HISTORY_ADDENDUM
     if include_chart or include_higher_timeframe:
         prompt += CHART_VISION_ADDENDUM
     return prompt

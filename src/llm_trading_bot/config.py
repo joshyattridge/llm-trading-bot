@@ -41,6 +41,16 @@ class Settings(BaseSettings):
         validation_alias="LLM_INCLUDE_DRAWDOWN",
         description="Include peak equity and current drawdown in LLM account state.",
     )
+    llm_include_trade_history: bool = Field(
+        default=False,
+        validation_alias="LLM_INCLUDE_TRADE_HISTORY",
+        description="Include recent closed trades and win/loss streak in LLM state.",
+    )
+    trade_history_limit: int = Field(
+        default=5,
+        validation_alias="TRADE_HISTORY_LIMIT",
+        description="Max closed trades to include in LLM context.",
+    )
 
     ccxt_api_key: str = Field(default="", validation_alias="CCXT_API_KEY")
     ccxt_api_secret: str = Field(default="", validation_alias="CCXT_API_SECRET")

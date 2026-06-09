@@ -45,6 +45,7 @@ class LLMStrategy(bt.Strategy):
             timeframe=settings.timeframe,
             commission_rate=settings.commission_rate,
             leverage=settings.leverage,
+            trade_history_limit=settings.trade_history_limit,
         )
         self._bar_count = 0
         self._total_bars = self.p.total_bars

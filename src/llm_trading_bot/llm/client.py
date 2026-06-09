@@ -15,6 +15,7 @@ from llm_trading_bot.trading.models import (
     PositionState,
     PositionSide,
 )
+from llm_trading_bot.trading.trade_history import TradeHistoryTracker
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +34,20 @@ class LLMTradingAdvisor:
         market: MultiTimeframeMarket,
         position: PositionState,
         account: AccountState,
+        *,
+        trade_history: TradeHistoryTracker | None = None,
     ) -> LLMDecision:
         market_payload = market_to_prompt(market)
+        history_payload = (
+            trade_history.to_prompt()
+            if self.settings.llm_include_trade_history and trade_history is not None
+            else None
+        )
         state = state_to_prompt(
             position,
             account,
             include_drawdown=self.settings.llm_include_drawdown,
+            trade_history=history_payload,
         )
         chart_images = (
             self._build_chart_images(market, position) if self.settings.llm_include_chart else None
@@ -62,6 +71,7 @@ class LLMTradingAdvisor:
                         include_chart=self.settings.llm_include_chart,
                         include_higher_timeframe=market.higher is not None,
                         include_drawdown=self.settings.llm_include_drawdown,
+                        include_trade_history=self.settings.llm_include_trade_history,
                     ),
                 },
                 {"role": "user", "content": user_content},

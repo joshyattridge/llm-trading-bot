@@ -19,6 +19,10 @@ from llm_trading_bot.trading.models import (
 )
 from llm_trading_bot.trading.drawdown import DrawdownTracker
 from llm_trading_bot.trading.stops import StopHit, check_stop_hit
+from llm_trading_bot.trading.trade_history import (
+    TradeHistoryTracker,
+    exit_reason_from_stop_hit,
+)
 
 if TYPE_CHECKING:
     from llm_trading_bot.display import TerminalDisplay
@@ -39,6 +43,7 @@ class TradingEngine:
         timeframe: str = "",
         commission_rate: float = 0.001,
         leverage: float = 1.0,
+        trade_history_limit: int = 5,
     ):
         self.advisor = advisor
         self.broker = broker
@@ -48,10 +53,12 @@ class TradingEngine:
         self.commission_rate = commission_rate
         self.leverage = leverage
         self._drawdown_tracker = DrawdownTracker()
+        self._trade_history = TradeHistoryTracker(max_trades=trade_history_limit)
         self._bars_in_trade = 0
         self._pending_panel: dict[str, Any] | None = None
         self._display_flushed = False
         self._wait_for_order_notify = False
+        self._pending_close: dict[str, Any] | None = None
 
     def on_new_candle(
         self,
@@ -112,7 +119,12 @@ class TradingEngine:
         account = self.broker.get_account(mark_price=close_price)
         account = self._drawdown_tracker.enrich_account(account)
 
-        decision = self.advisor.decide(market, position, account)
+        decision = self.advisor.decide(
+            market,
+            position,
+            account,
+            trade_history=self._trade_history,
+        )
         sizing_price = None
         if decision.action in (Action.ENTER_LONG, Action.ENTER_SHORT):
             side = (
@@ -124,6 +136,13 @@ class TradingEngine:
                 side, candle.close, candle.high, candle.low
             )
 
+        pre_close_position = (
+            position.model_copy()
+            if position.side != PositionSide.FLAT
+            else None
+        )
+        pre_close_bars = self._bars_in_trade
+
         outcome = execute_decision(
             self.broker,
             decision,
@@ -132,6 +151,23 @@ class TradingEngine:
             leverage=self.leverage,
             sizing_price=sizing_price,
         )
+
+        if outcome == ExecutionOutcome.CLOSED and pre_close_position is not None:
+            post_position = self.broker.get_position(mark_price=close_price)
+            if post_position.side == PositionSide.FLAT:
+                self._record_closed_trade(
+                    pre_close_position,
+                    exit_price=close_price,
+                    bars_held=pre_close_bars,
+                    exit_reason="llm_close",
+                )
+            else:
+                self._pending_close = {
+                    "position": pre_close_position,
+                    "bars_held": pre_close_bars,
+                    "exit_price": close_price,
+                    "exit_reason": "llm_close",
+                }
 
         position = self.broker.get_position(mark_price=close_price)
         account = self.broker.get_account(mark_price=close_price)
@@ -174,6 +210,7 @@ class TradingEngine:
         self._pending_panel["position"] = self.broker.get_position(mark_price=mark)
         self._pending_panel["account"] = self.broker.get_account(mark_price=mark)
         self._wait_for_order_notify = False
+        self._finalize_pending_close(mark)
         self.flush_display()
 
     def waiting_for_order_notify(self) -> bool:
@@ -235,9 +272,44 @@ class TradingEngine:
             return None
 
         logger.debug("Closing position — %s", hit.reason)
+        self._record_closed_trade(
+            position,
+            exit_price=hit.fill_price,
+            bars_held=self._bars_in_trade,
+            exit_reason=exit_reason_from_stop_hit(hit.reason),
+        )
         self.broker.close_position_at_price(hit.fill_price)
         self._bars_in_trade = 0
         return hit
+
+    def _record_closed_trade(
+        self,
+        position: PositionState,
+        *,
+        exit_price: float,
+        bars_held: int,
+        exit_reason: str,
+    ) -> None:
+        self._trade_history.record_close(
+            position,
+            exit_price=exit_price,
+            bars_held=bars_held,
+            exit_reason=exit_reason,
+        )
+
+    def _finalize_pending_close(self, mark_price: float) -> None:
+        if self._pending_close is None:
+            return
+        position = self.broker.get_position(mark_price=mark_price)
+        if position.side != PositionSide.FLAT:
+            return
+        self._record_closed_trade(
+            self._pending_close["position"],
+            exit_price=self._pending_close["exit_price"],
+            bars_held=self._pending_close["bars_held"],
+            exit_reason=self._pending_close["exit_reason"],
+        )
+        self._pending_close = None
 
     @staticmethod
     def _should_wait_for_order(

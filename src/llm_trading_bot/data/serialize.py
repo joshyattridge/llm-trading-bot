@@ -33,6 +33,7 @@ def state_to_prompt(
     account: AccountState,
     *,
     include_drawdown: bool = False,
+    trade_history: dict | None = None,
 ) -> dict:
     pos: dict = {"side": position.side.value}
     if position.pending_entry:
@@ -57,7 +58,10 @@ def state_to_prompt(
         account_payload["peak_equity"] = account.peak_equity
         account_payload["drawdown_pct"] = account.drawdown_pct
 
-    return {
+    payload: dict = {
         "position": pos,
         "account": account_payload,
     }
+    if trade_history is not None:
+        payload["trade_history"] = trade_history
+    return payload
