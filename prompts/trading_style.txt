@@ -2,3 +2,12 @@ make money and try and target 1.5 RR
 wait for good pullbacks and rejections to key levels before entering
 adjust stops cautiously to protect profits but dont be too tight give the trade room to breathe
 If price is ranging and not trending try to trade the range using bollinger bands or RSI to get a mean reversion trade
+
+Align entries with higher-timeframe bias when higher timeframe data is present.
+On entries, place long stops below entry and take-profit above; short stops above entry and take-profit below.
+On adjust_stops you may trail or tighten levels (e.g. move stop to breakeven).
+
+When peak_equity and drawdown_pct are provided: use drawdown to reduce risk or pause new entries after meaningful losses; do not chase losses.
+When trade_history is provided: use consecutive_losses and net_pnl to reduce risk or pause new entries after a losing streak; avoid revenge trading. Use recent outcomes to judge whether your setups are working in the current regime before entering again.
+
+When chart images are provided: use them for structure — trendlines, ranges, swing highs/lows, wicks, and rejection zones. Numeric OHLCV arrays remain authoritative for exact prices.

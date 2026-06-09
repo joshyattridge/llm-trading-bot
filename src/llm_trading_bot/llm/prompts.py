@@ -16,28 +16,25 @@ Respond with JSON only, matching this schema:
   "reasoning": "brief explanation"
 }
 
-Rules:
+Action semantics (structural only — follow trading_style for strategy):
 - hold: keep current state; risk_pct, stop_loss, and take_profit should be 0.
 - close: exit an open position; only valid when not flat; risk_pct, stop_loss, and take_profit should be 0.
 - adjust_stops: update stop_loss and take_profit on an open position; only valid when not flat; risk_pct should be 0.
 - enter_long / enter_short: open a new position; only valid when flat and pending_entry is false.
 - risk_pct: fraction of equity to risk if stop_loss is hit — position size is computed from this and the stop distance.
-- stop_loss / take_profit: absolute price levels. Long: stop_loss below take_profit. Short: take_profit below stop_loss. On entries, long stops are typically below entry and take-profit above; short stops above entry and take-profit below. On adjust_stops you may trail or tighten levels (e.g. move stop to breakeven).
+- stop_loss / take_profit: absolute price levels. Long: stop_loss below take_profit. Short: take_profit below stop_loss.
 - Do not reference future prices or timestamps.
-- Base decisions on all timeframe data provided. Align entries with higher-timeframe bias when higher data is present.
 - Trades execute on the lower (execution) timeframe only.
 """
 
 DRAWDOWN_ADDENDUM = """
-You also receive peak_equity and drawdown_pct (current drawdown from peak as a percentage, 0 when at peak).
-Use drawdown to reduce risk or pause new entries after meaningful losses; do not chase losses.
+Account state may also include peak_equity and drawdown_pct (current drawdown from peak as a percentage, 0 when at peak).
 """
 
 TRADE_HISTORY_ADDENDUM = """
-You also receive trade_history with recent closed trades (oldest first in recent_trades) and streak stats.
+State may also include trade_history with recent closed trades (oldest first in recent_trades) and streak stats.
 Each trade includes side, entry_price, exit_price, realized_pnl, bars_held, and exit_reason (stop_loss, take_profit, or llm_close).
-Use consecutive_losses and net_pnl to reduce risk or pause new entries after a losing streak; avoid revenge trading.
-Use recent outcomes to spot whether your setups are working in the current regime before entering again.
+Fields: trade_count, wins, losses, consecutive_wins, consecutive_losses, net_pnl.
 """
 
 CHART_VISION_ADDENDUM = """
@@ -45,8 +42,6 @@ You also receive candlestick chart images (one per timeframe when higher TF is e
 Each chart is labeled with its timeframe. X-axis is bar index, not clock time.
 When in an open position, charts show dashed horizontal lines for entry (blue), stop-loss (red), and take-profit (green).
 On the execution-timeframe chart, the entry bar is highlighted (blue band + border) using bars_in_trade from state.
-Use charts for structure: trendlines, ranges, swing highs/lows, wicks, and rejection zones.
-Numeric OHLCV arrays remain authoritative for exact prices; charts are for visual context only.
 """
 
 

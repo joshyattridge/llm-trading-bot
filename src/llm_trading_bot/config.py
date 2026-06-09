@@ -87,10 +87,7 @@ class Settings(BaseSettings):
         if path.exists():
             return path.read_text(encoding="utf-8").strip()
 
-        return (
-            "Trade conservatively. Prefer holding in unclear markets. "
-            "On entries, set risk_pct and absolute stop_loss / take_profit levels."
-        )
+        return "On entries, set risk_pct and absolute stop_loss / take_profit levels."
 
 
 def get_settings() -> Settings:
