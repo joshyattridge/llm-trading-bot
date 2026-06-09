@@ -36,6 +36,8 @@ Use drawdown to reduce risk or pause new entries after meaningful losses; do not
 CHART_VISION_ADDENDUM = """
 You also receive candlestick chart images (one per timeframe when higher TF is enabled).
 Each chart is labeled with its timeframe. X-axis is bar index, not clock time.
+When in an open position, charts show dashed horizontal lines for entry (blue), stop-loss (red), and take-profit (green).
+On the execution-timeframe chart, the entry bar is highlighted (blue band + border) using bars_in_trade from state.
 Use charts for structure: trendlines, ranges, swing highs/lows, wicks, and rejection zones.
 Numeric OHLCV arrays remain authoritative for exact prices; charts are for visual context only.
 """

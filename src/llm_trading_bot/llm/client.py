@@ -40,7 +40,9 @@ class LLMTradingAdvisor:
             account,
             include_drawdown=self.settings.llm_include_drawdown,
         )
-        chart_images = self._build_chart_images(market) if self.settings.llm_include_chart else None
+        chart_images = (
+            self._build_chart_images(market, position) if self.settings.llm_include_chart else None
+        )
         user_content = build_user_content(
             market_payload,
             state,
@@ -89,14 +91,25 @@ class LLMTradingAdvisor:
     def _build_chart_images(
         self,
         market: MultiTimeframeMarket,
+        position: PositionState,
     ) -> list[tuple[str, str]]:
         """Lower timeframe chart first, then higher."""
         images: list[tuple[str, str]] = []
         symbol = self.settings.symbol
+        in_position = position.side != PositionSide.FLAT
+        entry_price = position.entry_price if in_position else None
+        stop_loss = position.stop_loss if in_position else None
+        take_profit = position.take_profit if in_position else None
+        entry_bar_index = (
+            self._entry_bar_index(len(market.lower.candles), position.bars_in_trade)
+            if in_position
+            else None
+        )
 
         for series in (market.lower, market.higher):
             if series is None or not series.candles:
                 continue
+            is_execution_tf = series is market.lower
             images.append(
                 (
                     series.timeframe,
@@ -104,10 +117,26 @@ class LLMTradingAdvisor:
                         series.candles,
                         symbol=symbol,
                         timeframe=series.timeframe,
+                        entry_price=entry_price,
+                        stop_loss=stop_loss,
+                        take_profit=take_profit,
+                        entry_bar_index=entry_bar_index if is_execution_tf else None,
                     ),
                 )
             )
         return images
+
+    @staticmethod
+    def _entry_bar_index(candle_count: int, bars_in_trade: int) -> int | None:
+        """Map bars_in_trade to a bar index in the visible execution-TF window."""
+        if candle_count <= 0:
+            return None
+        if bars_in_trade <= 0:
+            return candle_count - 1
+        idx = candle_count - bars_in_trade - 1
+        if idx < 0:
+            return None
+        return idx
 
     def _validate_decision(
         self,

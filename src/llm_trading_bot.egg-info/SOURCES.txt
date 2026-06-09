@@ -18,6 +18,7 @@ src/llm_trading_bot/data/__init__.py
 src/llm_trading_bot/data/chart.py
 src/llm_trading_bot/data/historical.py
 src/llm_trading_bot/data/market.py
+src/llm_trading_bot/data/range.py
 src/llm_trading_bot/data/serialize.py
 src/llm_trading_bot/llm/__init__.py
 src/llm_trading_bot/llm/client.py
@@ -28,11 +29,17 @@ src/llm_trading_bot/runners/live.py
 src/llm_trading_bot/strategies/__init__.py
 src/llm_trading_bot/strategies/llm_strategy.py
 src/llm_trading_bot/trading/__init__.py
+src/llm_trading_bot/trading/drawdown.py
 src/llm_trading_bot/trading/engine.py
 src/llm_trading_bot/trading/executor.py
 src/llm_trading_bot/trading/models.py
 src/llm_trading_bot/trading/stops.py
 tests/test_backtrader_broker.py
+tests/test_drawdown.py
 tests/test_engine.py
 tests/test_executor.py
+tests/test_mark_price.py
+tests/test_range.py
 tests/test_stops.py
+tests/test_trading_edge_cases.py
+tests/test_trading_logic_integration.py
